@@ -34,7 +34,7 @@ class MainActivity : AppCompatActivity() {
                 val s = MyAccessibilityService.instance!!.openWirelessDebugAndGetAddr()
                 Toast.makeText(this@MainActivity, s, Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this@MainActivity, "没有无障碍权限", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, R.string.no_accessibility_permission, Toast.LENGTH_SHORT).show()
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             }
         }

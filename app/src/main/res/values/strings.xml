@@ -6,4 +6,5 @@
     <string name="btn_connect_to_adb_server">Connect</string>
     <string name="tv_title">Auto ADB Wireless</string>
     <string name="btn_pair_to_adb_server">Pair</string>
+    <string name="no_accessibility_permission">No accessibility permission</string>
 </resources>
