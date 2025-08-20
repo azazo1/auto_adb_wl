@@ -4,7 +4,40 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:gravity="center"
     android:orientation="vertical"
     tools:context=".MainActivity">
 
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/tv_title"
+        android:textSize="30sp" />
+
+    <EditText
+        android:id="@+id/et_server_addr"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="50dp"
+        android:hint="@string/et_auto_adb_server_addr"
+        android:importantForAutofill="no"
+        android:inputType="text" />
+
+    <Space
+        android:layout_width="wrap_content"
+        android:layout_height="100dp" />
+
+    <Button
+        android:id="@+id/btn_pair"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/btn_pair_to_adb_server"
+        android:textAllCaps="false" />
+
+    <Button
+        android:id="@+id/btn_connect"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/btn_connect_to_adb_server"
+        android:textAllCaps="false" />
 </LinearLayout>

@@ -1,5 +1,9 @@
 <resources>
-    <string name="app_name">accessibility_template</string>
-    <string name="accessibility_service_label">my_accessibility_service</string>
+    <string name="app_name">Auto ADB WL</string>
+    <string name="accessibility_service_label">Automatically connect adb wireless</string>
     <string name="accessibility_service_description">this is a service description</string>
+    <string name="et_auto_adb_server_addr">Auto adb server address (\"ip:port\")</string>
+    <string name="btn_connect_to_adb_server">Connect</string>
+    <string name="tv_title">Auto ADB Wireless</string>
+    <string name="btn_pair_to_adb_server">Pair</string>
 </resources>
