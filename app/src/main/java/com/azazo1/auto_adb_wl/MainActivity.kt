@@ -20,6 +20,11 @@ fun String.toMessageConnect(): String {
     return "c-$this"
 }
 
+fun String.toMessageDisconnect(): String {
+    return "d-$this"
+}
+
+
 class MainActivity : AppCompatActivity() {
     companion object {
         const val WIDGET_PREF = "widget_pref"
@@ -42,6 +47,7 @@ class MainActivity : AppCompatActivity() {
         loadWidgetStates()
         binding.btnConnect.setOnClickListener { connect() }
         binding.btnPair.setOnClickListener { pair() }
+        binding.btnDisconnect.setOnClickListener { disconnect() }
         binding.etServerAddr.addTextChangedListener {
             it?.let {
                 sharedPreferences.edit {
@@ -66,7 +72,7 @@ class MainActivity : AppCompatActivity() {
         return InetSocketAddress(addrPair[0], addrPair[1].toInt())
     }
 
-    fun connect() {
+    fun connect(disconnect: Boolean = false) {
         val inputAddr = try {
             getInputAddr()
         } catch (_: Exception) {
@@ -86,7 +92,13 @@ class MainActivity : AppCompatActivity() {
                 }
                 val comm = CommunicatorPlain()
                 comm.connect(inputAddr)
-                comm.send(addr.toMessageConnect())
+                comm.send(
+                    if (disconnect) {
+                        addr.toMessageDisconnect()
+                    } else {
+                        addr.toMessageConnect()
+                    }
+                )
                 Toast.makeText(this@MainActivity, addr, Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(
@@ -97,5 +109,9 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             }
         }
+    }
+
+    fun disconnect() {
+        connect(true)
     }
 }

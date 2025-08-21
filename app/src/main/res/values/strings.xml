@@ -4,6 +4,7 @@
     <string name="accessibility_service_description">this is a service description</string>
     <string name="et_auto_adb_server_addr">Auto adb server address (\"ip:port\")</string>
     <string name="btn_connect_to_adb_server">Connect</string>
+    <string name="btn_disconnect_to_adb_server">Disconnect</string>
     <string name="tv_title">Auto ADB Wireless</string>
     <string name="btn_pair_to_adb_server">Pair</string>
     <string name="no_accessibility_permission">No accessibility permission</string>

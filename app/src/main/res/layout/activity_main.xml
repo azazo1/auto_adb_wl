@@ -40,4 +40,11 @@
         android:layout_height="wrap_content"
         android:text="@string/btn_connect_to_adb_server"
         android:textAllCaps="false" />
+
+    <Button
+        android:id="@+id/btn_disconnect"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/btn_disconnect_to_adb_server"
+        android:textAllCaps="false" />
 </LinearLayout>
