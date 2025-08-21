@@ -58,7 +58,7 @@ class CommunicatorPlain : Communicator {
         check(connected.get()) { "Not connected yet. Call connect() first." }
         withContext(Dispatchers.IO) {
             bufWriter?.write(message.trimEnd('\n') + "\n")
-            bufWriter?.flush()
+            bufWriter?.flush() // 这行有时会把 pair 的那个弹出窗口挤掉, 不知道为什么.
         }
     }
 

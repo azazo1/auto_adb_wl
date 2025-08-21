@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Auto ADB WL</string>
     <string name="accessibility_service_label">Automatically connect adb wireless</string>
-    <string name="accessibility_service_description">this is a service description</string>
+    <string name="accessibility_service_description">Automatically connect adb wireless</string>
     <string name="et_auto_adb_server_addr">Auto adb server address (\"ip:port\")</string>
     <string name="btn_connect_to_adb_server">Connect</string>
     <string name="btn_disconnect_to_adb_server">Disconnect</string>
@@ -10,4 +10,8 @@
     <string name="no_accessibility_permission">No accessibility permission</string>
     <string name="failed_to_get_wireless_debug_address">Failed to get wireless debug address</string>
     <string name="please_fill_input_addr">Please fill the input address correctly</string>
+    <string name="failed_to_pair">Failed to pair to adb server</string>
+    <string name="success_to_pair">Successfully paired to adb server</string>
+    <string name="connect_req_sent">Connect request sent: %s</string>
+    <string name="disconnect_req_sent">Disconnect request sent: %s</string>
 </resources>

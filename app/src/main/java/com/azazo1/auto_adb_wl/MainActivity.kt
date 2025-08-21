@@ -24,11 +24,16 @@ fun String.toMessageDisconnect(): String {
     return "d-$this"
 }
 
+fun String.toMessagePair(code: String): String {
+    return "p-$this-$code"
+}
+
 
 class MainActivity : AppCompatActivity() {
     companion object {
         const val WIDGET_PREF = "widget_pref"
         const val INPUT_ADDR = "input_addr"
+        const val TAG = "MainActivity"
     }
 
     private lateinit var binding: ActivityMainBinding
@@ -57,22 +62,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun loadWidgetStates() {
+    private fun loadWidgetStates() {
         binding.etServerAddr.setText(
             sharedPreferences.getString(INPUT_ADDR, "localhost:15555")
         )
     }
 
-    fun pair() {
-    }
-
-    fun getInputAddr(): InetSocketAddress {
-        val addr = binding.etServerAddr.text.toString()
-        val addrPair = addr.split(":")
-        return InetSocketAddress(addrPair[0], addrPair[1].toInt())
-    }
-
-    fun connect(disconnect: Boolean = false) {
+    private fun pair() {
         val inputAddr = try {
             getInputAddr()
         } catch (_: Exception) {
@@ -81,7 +77,53 @@ class MainActivity : AppCompatActivity() {
         }
         lifecycleScope.launch {
             if (MyAccessibilityService.instance != null) {
-                val addr = MyAccessibilityService.instance!!.openWirelessDebugAndGetAddr()
+                val suc =
+                    MyAccessibilityService.instance!!.pairADB pairAction@{ addr: String, code: String ->
+                        try {
+                            val comm = CommunicatorPlain()
+                            comm.connect(inputAddr)
+                            comm.send(addr.toMessagePair(code))
+                            val rst = comm.receive() == "ok"
+                            comm.close()
+                            return@pairAction rst
+                        } catch (_: Exception) {
+                            return@pairAction false
+                        }
+                    }
+                if (!suc) {
+                    Toast.makeText(this@MainActivity, R.string.failed_to_pair, Toast.LENGTH_SHORT)
+                        .show()
+                } else {
+                    Toast.makeText(this@MainActivity, R.string.success_to_pair, Toast.LENGTH_SHORT)
+                        .show()
+                }
+            } else {
+                Toast.makeText(
+                    this@MainActivity,
+                    R.string.no_accessibility_permission,
+                    Toast.LENGTH_SHORT
+                ).show()
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
+        }
+    }
+
+    private fun getInputAddr(): InetSocketAddress {
+        val addr = binding.etServerAddr.text.toString()
+        val addrPair = addr.split(":")
+        return InetSocketAddress(addrPair[0], addrPair[1].toInt())
+    }
+
+    private fun connect(disconnect: Boolean = false) {
+        val inputAddr = try {
+            getInputAddr()
+        } catch (_: Exception) {
+            Toast.makeText(this, R.string.please_fill_input_addr, Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            if (MyAccessibilityService.instance != null) {
+                val addr = MyAccessibilityService.instance!!.fetchADBAddress()
                 if (addr == null) {
                     Toast.makeText(
                         this@MainActivity,
@@ -99,7 +141,16 @@ class MainActivity : AppCompatActivity() {
                         addr.toMessageConnect()
                     }
                 )
-                Toast.makeText(this@MainActivity, addr, Toast.LENGTH_SHORT).show()
+                comm.close()
+                Toast.makeText(
+                    this@MainActivity, getString(
+                        if (!disconnect) {
+                            R.string.connect_req_sent
+                        } else {
+                            R.string.disconnect_req_sent
+                        }, addr
+                    ), Toast.LENGTH_SHORT
+                ).show()
             } else {
                 Toast.makeText(
                     this@MainActivity,
@@ -111,7 +162,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun disconnect() {
+    private fun disconnect() {
         connect(true)
     }
 }

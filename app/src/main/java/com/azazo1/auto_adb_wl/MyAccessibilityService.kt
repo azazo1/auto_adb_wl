@@ -18,6 +18,7 @@ class MyAccessibilityService : AccessibilityService() {
     companion object {
         // 静态实例，用于在外部（Activity）调用服务功能
         var instance: MyAccessibilityService? = null
+        const val TAG = "mas"
     }
 
     /// 用户同意了无障碍权限的时候
@@ -26,34 +27,45 @@ class MyAccessibilityService : AccessibilityService() {
         instance = this  // 保存服务实例
         // 如果需要动态修改配置信息，可以在此设置 serviceInfo；此处利用 XML 配置，无需额外设置
         // 见 <pj>/app/src/main/res/xml/accessibility_service_config.xml
-        Log.i("mas", "onServiceConnected")
+        Log.i(TAG, "onServiceConnected")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-//        event?.let {
-//            Log.i("mas", log(it.eventType.toDouble(), 2.toDouble()).toString())
+//        if (event == null) {
+//            return
 //        }
-//        event?.source?.let {
-//            Log.i("mas", it.toString())
+//        if (event.source == null || event.source?.viewIdResourceName == null) {
+//            return
 //        }
-//        Log.i("mas", "onAccessibilityEvent")
+//        if (event.source?.viewIdResourceName?.contains("com.android.systemui") == true) {
+//            return
+//        }
+////        Log.w(
+////            TAG,
+////            "type: ${AccessibilityEvent.eventTypeToString(event.eventType)}\n" +
+////                    "resource_name: ${event.source?.viewIdResourceName}\n" +
+////                    "content desc: ${event.source?.contentDescription}"
+////        )
+//        Log.w(
+//            TAG,
+//            "$event"
+//        )
     }
 
     override fun onInterrupt() {
-        Log.i("mas", "onInterrupt")
+        Log.i(TAG, "onInterrupt")
     }
 
     /// 用户决定关闭无障碍权限时
     override fun onUnbind(intent: Intent?): Boolean {
-        Log.i("mas", "onUnbind")
+        Log.i(TAG, "onUnbind")
         return super.onUnbind(intent)
     }
 
     /**
-     * 打开开发者选项 -> 无线调试页面并复制调试地址到剪贴板的核心流程
+     * @note 无需手动返回退出
      */
-    suspend fun openWirelessDebugAndGetAddr(): String? {
-        // 为避免阻塞UI线程，可在新线程中执行自动化操作
+    suspend fun <T> runInWirelessDebugMenu(block: suspend () -> T): T? {
         mainLooper.run {
             startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -61,11 +73,11 @@ class MyAccessibilityService : AccessibilityService() {
         }
         return withContext(Dispatchers.Default) {
             // 在开发者选项页面寻找“无线调试”并点击进入其设置页
-            var wirelessDebugNode = findNodeByText("Wireless debugging", "无线调试")
+            var wirelessDebugNode = findNodeByText("无线调试", retryTimes = 0)
             var i = 0
             while (wirelessDebugNode == null && i < 10) {
                 performSwipeDown()
-                wirelessDebugNode = findNodeByText("Wireless debugging", "无线调试")
+                wirelessDebugNode = findNodeByText("无线调试", retryTimes = 0)
                 i++
             }
             if (wirelessDebugNode == null) {
@@ -75,37 +87,84 @@ class MyAccessibilityService : AccessibilityService() {
             clickNode(wirelessDebugNode)
 
             delay(300)  // 等待无线调试详情页面出现
+            val rst = block()
+            performBack()
+            performBack()
+            return@withContext rst
+        }
+    }
 
+    /**
+     * 打开开发者选项 -> 无线调试页面并获取无线调试地址
+     */
+    suspend fun fetchADBAddress(): String? {
+        return runInWirelessDebugMenu {
             // 从无线调试页面提取IP地址和端口号文本
             var debugAddress = findDebugAddressText()  // 尝试匹配形如 "192.168.x.x:port" 的文本
-            if (debugAddress == null) {
+            var i = 0
+            while (debugAddress == null && i <= 3) {
                 // 如果没有读取到监听的端口那么就关闭/开启无线调试继续.
-                val debugTriggerBtn = findNodeByText("Wireless debugging", "无线调试")
+                val debugTriggerBtn = findNodeByText("无线调试")
                 if (debugTriggerBtn == null) {
-                    performBack()
-                    performBack()
-                    return@withContext null
+                    return@runInWirelessDebugMenu null
                 }
                 clickNode(debugTriggerBtn)
                 delay(300)
+                debugAddress = findDebugAddressText()
+                i++
             }
-            debugAddress = findDebugAddressText()  // 尝试匹配形如 "192.168.x.x:port" 的文本
-            Log.i("mas", "find addr $debugAddress")
-            performBack()
-            performBack()
-            return@withContext debugAddress
+            Log.i(TAG, "find addr $debugAddress")
+            return@runInWirelessDebugMenu debugAddress
         }
+    }
+
+    suspend fun pairADB(pairAction: suspend (pairAddress: String, pairCode: String) -> Boolean): Boolean {
+        return runInWirelessDebugMenu {
+            // 从无线调试页面提取IP地址和端口号文本, 确保当前在无线调试页面
+            var debugAddress = findDebugAddressText()  // 尝试匹配形如 "192.168.x.x:port" 的文本
+            var i = 0
+            while (debugAddress == null && i <= 3) {
+                // 如果没有读取到监听的端口那么就关闭/开启无线调试继续.
+                val debugTriggerBtn = findNodeByText("无线调试")
+                if (debugTriggerBtn == null) {
+                    return@runInWirelessDebugMenu null
+                }
+                clickNode(debugTriggerBtn)
+                delay(300)
+                debugAddress = findDebugAddressText()
+                i++
+            }
+            // 进入 pair 界面
+            val pairBtn =
+                findNodeByText("使用配对码配对设备") ?: return@runInWirelessDebugMenu false
+            clickNode(pairBtn)
+            findNodeByText("WLAN 配对码") // 等待页面加载
+            val code = findDebugPairCode() ?: return@runInWirelessDebugMenu false
+            val addr = findDebugAddressText() ?: return@runInWirelessDebugMenu false
+            val rst = pairAction(addr, code)
+            performBack()
+            return@runInWirelessDebugMenu rst
+        } ?: false
     }
 
     /**
      * 辅助函数：根据给定文本查找当前界面节点（支持多语言匹配，返回第一个匹配项）
      */
-    private fun findNodeByText(vararg texts: String): AccessibilityNodeInfo? {
-        val root = rootInActiveWindow ?: return null
-        for (txt in texts) {
-            val nodes = root.findAccessibilityNodeInfosByText(txt)
-            if (!nodes.isNullOrEmpty()) {
-                return nodes[0]  // 返回找到的第一个节点
+    private suspend fun findNodeByText(
+        vararg texts: String,
+        retryTimes: Int = 20,
+        interval: Long = 100
+    ): AccessibilityNodeInfo? {
+        (0..retryTimes).forEach { i ->
+            val root = rootInActiveWindow
+            for (txt in texts) {
+                val nodes = root.findAccessibilityNodeInfosByText(txt)
+                if (!nodes.isNullOrEmpty()) {
+                    return nodes[0]  // 返回找到的第一个节点
+                }
+            }
+            if (i < retryTimes) {
+                delay(interval)
             }
         }
         return null
@@ -123,20 +182,22 @@ class MyAccessibilityService : AccessibilityService() {
     /**
      * 辅助函数：对指定节点执行点击动作（会自动寻找可点击的父节点）
      */
-    private fun clickNode(node: AccessibilityNodeInfo) {
+    private suspend fun clickNode(node: AccessibilityNodeInfo, preDelay: Long = 100) {
+        delay(preDelay)
         var target: AccessibilityNodeInfo? = node
         // 寻找可点击的父节点
         while (target != null && !target.isClickable) {
             target = target.parent
         }
         target?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        Log.w(TAG, "click ${node.text}")
     }
 
     /**
      * 辅助函数：遍历当前界面，提取形如 "IP:Port" 的调试地址文本
      */
     private fun findDebugAddressText(): String? {
-        val root = rootInActiveWindow ?: return null
+        val root = rootInActiveWindow
         // 查找包含 ":" 的所有节点，匹配其中的 IP:端口 模式
         val nodes = root.findAccessibilityNodeInfosByText(":")
         for (node in nodes) {
@@ -150,13 +211,35 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     /**
+     * 辅助函数：遍历当前界面，提取形如 "\d{6}" 的配对码
+     */
+    private fun findDebugPairCode(): String? {
+        val root = rootInActiveWindow
+        // 查找包含 ":" 的所有节点，匹配其中的 IP:端口 模式
+        for (c in '0'..'9') {
+            val nodes = root.findAccessibilityNodeInfosByText("$c")
+            for (node in nodes) {
+                val text = node.text?.toString() ?: continue
+                val match = Regex("^(\\d{6})$").find(text)
+                if (match != null) {
+                    return match.groupValues[1]  // 返回匹配的 "IP:端口" 子串
+                }
+            }
+        }
+        return null
+    }
+
+    /**
      * 模拟向下滑动操作
      *
      * @param heightRatio 向下滑动的距离(占屏幕的百分比, 推荐取 0 ~ 0.7)
      * @param duration 滑动持续时间（毫秒）
      * @return true 如果手势成功发送并完成，false 如果手势被取消或失败。
      */
-    suspend fun performSwipeDown(heightRatio: Float = 0.3f, duration: Long = 200L): Boolean {
+    private suspend fun performSwipeDown(
+        heightRatio: Float = 0.3f,
+        duration: Long = 200L
+    ): Boolean {
         // 获取屏幕尺寸
         val displayMetrics = resources.displayMetrics
         val screenWidth = displayMetrics.widthPixels
@@ -219,8 +302,9 @@ class MyAccessibilityService : AccessibilityService() {
     /**
      * 全局返回
      */
-    suspend fun performBack() {
+    private suspend fun performBack(wait: Long = 200) {
+        Log.i(TAG, "performBack")
         performGlobalAction(GLOBAL_ACTION_BACK)
-        delay(100L)
+        delay(wait)
     }
 }
