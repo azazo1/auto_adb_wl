@@ -7,4 +7,6 @@
     <string name="tv_title">Auto ADB Wireless</string>
     <string name="btn_pair_to_adb_server">Pair</string>
     <string name="no_accessibility_permission">No accessibility permission</string>
+    <string name="failed_to_get_wireless_debug_address">Failed to get wireless debug address</string>
+    <string name="please_fill_input_addr">Please fill the input address correctly</string>
 </resources>

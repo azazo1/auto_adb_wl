@@ -60,10 +60,7 @@ class MyAccessibilityService : AccessibilityService() {
             })
         }
         return withContext(Dispatchers.Default) {
-
-            delay(1000)  // 等待开发者选项页面加载
-
-            // 3. 在开发者选项页面寻找“无线调试”并点击进入其设置页
+            // 在开发者选项页面寻找“无线调试”并点击进入其设置页
             var wirelessDebugNode = findNodeByText("Wireless debugging", "无线调试")
             var i = 0
             while (wirelessDebugNode == null && i < 10) {
@@ -79,7 +76,7 @@ class MyAccessibilityService : AccessibilityService() {
 
             delay(300)  // 等待无线调试详情页面出现
 
-            // 4. 从无线调试页面提取IP地址和端口号文本
+            // 从无线调试页面提取IP地址和端口号文本
             var debugAddress = findDebugAddressText()  // 尝试匹配形如 "192.168.x.x:port" 的文本
             if (debugAddress == null) {
                 // 如果没有读取到监听的端口那么就关闭/开启无线调试继续.

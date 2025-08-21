@@ -4,7 +4,7 @@ import java.io.Closeable
 import java.net.InetSocketAddress
 
 interface Communicator : Closeable {
-    fun connect(serverAddress: InetSocketAddress)
+    suspend fun connect(serverAddress: InetSocketAddress)
 
     /**
      * 服务器终止时返回 null, 其他情况下返回获取到的字符串
@@ -12,12 +12,7 @@ interface Communicator : Closeable {
     suspend fun receive(): String?
 
     /**
-     * 立刻不阻塞
-     */
-    fun tryReceive(): String?
-
-    /**
      * 发送消息
      */
-    fun send(message: String)
+    suspend fun send(message: String)
 }
