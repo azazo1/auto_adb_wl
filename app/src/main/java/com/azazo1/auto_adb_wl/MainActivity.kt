@@ -1,4 +1,4 @@
-package com.azazo1.accessibility_template
+package com.azazo1.auto_adb_wl
 
 import android.content.Intent
 import android.os.Bundle
@@ -9,7 +9,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
-import com.azazo1.accessibility_template.databinding.ActivityMainBinding
+import com.azazo1.auto_adb_wl.databinding.ActivityMainBinding
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {

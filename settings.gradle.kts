@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "accessibility_template"
+rootProject.name = "auto_adb_wl"
 include(":app")

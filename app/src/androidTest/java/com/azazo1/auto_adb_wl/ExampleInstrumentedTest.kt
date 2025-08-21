@@ -1,4 +1,4 @@
-package com.azazo1.accessibility_template
+package com.azazo1.auto_adb_wl
 
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -19,6 +19,6 @@ class ExampleInstrumentedTest {
     fun useAppContext() {
         // Context of the app under test.
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
-        assertEquals("com.azazo1.accessibility_template", appContext.packageName)
+        assertEquals("com.azazo1.auto_adb_wl", appContext.packageName)
     }
 }

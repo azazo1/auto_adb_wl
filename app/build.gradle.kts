@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.azazo1.accessibility_template"
+    namespace = "com.azazo1.auto_adb_wl"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.azazo1.accessibility_template"
+        applicationId = "com.azazo1.auto_adb_wl"
         minSdk = 28
         targetSdk = 35
         versionCode = 1

@@ -1,4 +1,4 @@
-package com.azazo1.accessibility_template
+package com.azazo1.auto_adb_wl
 
 import org.junit.Test
 
