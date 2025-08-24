@@ -47,4 +47,11 @@
         android:layout_height="wrap_content"
         android:text="@string/btn_disconnect_to_adb_server"
         android:textAllCaps="false" />
+
+    <Button
+        android:id="@+id/btn_open_scrcpy"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/btn_open_scrcpy"
+        android:textAllCaps="false" />
 </LinearLayout>

@@ -28,6 +28,10 @@ fun String.toMessagePair(code: String): String {
     return "p-$this-$code"
 }
 
+fun String.toMessageOpenScrcpy(): String {
+    return "s-"
+}
+
 
 class MainActivity : AppCompatActivity() {
     companion object {
@@ -60,12 +64,37 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        binding.btnOpenScrcpy.setOnClickListener { openScrcpy() }
     }
 
     private fun loadWidgetStates() {
         binding.etServerAddr.setText(
             sharedPreferences.getString(INPUT_ADDR, "localhost:15555")
         )
+    }
+
+    private fun openScrcpy() {
+        val inputAddr = try {
+            getInputAddr()
+        } catch (_: Exception) {
+            Toast.makeText(this, R.string.please_fill_input_addr, Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            try {
+                val comm = CommunicatorPlain()
+                comm.connect(inputAddr)
+                comm.send("".toMessageOpenScrcpy())
+                comm.close()
+                Toast.makeText(
+                    this@MainActivity,
+                    R.string.scrcpy_open_request_sent,
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Error: $e", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun pair() {

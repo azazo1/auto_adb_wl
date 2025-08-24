@@ -14,4 +14,6 @@
     <string name="success_to_pair">Successfully paired to adb server</string>
     <string name="connect_req_sent">Connect request sent: %s</string>
     <string name="disconnect_req_sent">Disconnect request sent: %s</string>
+    <string name="btn_open_scrcpy">Open Scrcpy</string>
+    <string name="scrcpy_open_request_sent">Scrcpy open request sent</string>
 </resources>
