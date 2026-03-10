@@ -68,4 +68,5 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.okhttp)
     implementation(libs.retrofit2.kotlinx.serialization.converter)
+    implementation(libs.androidx.datastore.preferences)
 }

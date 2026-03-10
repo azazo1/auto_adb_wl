@@ -8,6 +8,7 @@ import com.azazo1.auto_adb_wl_client.data.AdbConnectRequest
 import com.azazo1.auto_adb_wl_client.data.AdbDisconnectRequest
 import com.azazo1.auto_adb_wl_client.data.AdbPairRequest
 import com.azazo1.auto_adb_wl_client.data.DiscoveredService
+import com.azazo1.auto_adb_wl_client.data.PreferenceManager
 import com.azazo1.auto_adb_wl_client.data.ScrcpyLaunchMode
 import com.azazo1.auto_adb_wl_client.data.ScrcpyLaunchRequest
 import com.azazo1.auto_adb_wl_client.discovery.MdnsDiscovery
@@ -18,6 +19,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/**
+ * 操作结果
+ */
+data class OperationResult(
+    val success: Boolean,
+    val message: String,
+    val type: OperationType
+)
+
+enum class OperationType {
+    CONNECT, PAIR, SCRCPY
+}
 
 /**
  * UI 状态
@@ -50,28 +64,32 @@ data class UiState(
 )
 
 /**
- * 操作结果
- */
-data class OperationResult(
-    val success: Boolean,
-    val message: String,
-    val type: OperationType
-)
-
-enum class OperationType {
-    CONNECT, PAIR, SCRCPY
-}
-
-/**
  * 主 ViewModel
  */
 class MainViewModel(application: Application) : AndroidViewModel(application) {
+    // 初始化 PreferenceManager
+    private val prefManager = PreferenceManager(application)
 
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     private val mdnsDiscovery = MdnsDiscovery(application)
     private var discoveryJob: Job? = null
+
+    init {
+        // 初始化时从本地加载
+        viewModelScope.launch {
+            // 合并读取两个字段并更新 UI
+            prefManager.manualAddressFlow.collect { addr ->
+                _uiState.update { it.copy(manualAddress = addr) }
+            }
+        }
+        viewModelScope.launch {
+            prefManager.manualPortFlow.collect { port ->
+                _uiState.update { it.copy(manualPort = port) }
+            }
+        }
+    }
 
     /**
      * 开始发现服务
@@ -123,6 +141,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun updateManualAddress(address: String) {
         _uiState.update { it.copy(manualAddress = address) }
+        viewModelScope.launch {
+            prefManager.saveManualInfo(address, _uiState.value.manualPort)
+        }
     }
 
     /**
@@ -130,6 +151,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun updateManualPort(port: String) {
         _uiState.update { it.copy(manualPort = port) }
+        viewModelScope.launch {
+            prefManager.saveManualInfo(_uiState.value.manualAddress, port)
+        }
     }
 
     /**

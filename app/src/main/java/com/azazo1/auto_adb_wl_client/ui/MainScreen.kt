@@ -631,6 +631,9 @@ fun OperationResultCard(
                         OperationType.CONNECT -> "ADB 连接"
                         OperationType.PAIR -> "ADB 配对"
                         OperationType.SCRCPY -> "Scrcpy 启动"
+                        else -> {
+                            ""
+                        }
                     },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
