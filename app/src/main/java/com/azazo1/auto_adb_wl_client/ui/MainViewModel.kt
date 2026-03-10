@@ -107,7 +107,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * 选择服务
      */
-    fun selectService(service: Int) {
+    fun selectService(service: Int?) {
         _uiState.update { it.copy(selectedService = service) }
     }
 
@@ -131,8 +131,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun getCurrentServiceUrl(): String? {
         val state = _uiState.value
         if (state.selectedService != null) {
-            return state.discoveredServices[state.selectedService].baseUrl; }
-        else {
+            return state.discoveredServices[state.selectedService].baseUrl; } else {
             if (state.manualAddress.isNotBlank()) {
                 return "http://${state.manualAddress}:${state.manualPort}"
             } else {
@@ -167,7 +166,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update {
                     it.copy(
                         isConnecting = false,
-                        lastOperationResult = OperationResult(false, e.message ?: "连接失败", OperationType.CONNECT)
+                        lastOperationResult = OperationResult(
+                            false,
+                            e.message ?: "连接失败",
+                            OperationType.CONNECT
+                        )
                     )
                 }
             }
@@ -198,9 +201,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * 执行配对
      */
+    // todo 无障碍获取信息
     fun adbPair(address: String, pairCode: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isPairing = true, showPairDialog = false, lastOperationResult = null) }
+            _uiState.update {
+                it.copy(
+                    isPairing = true,
+                    showPairDialog = false,
+                    lastOperationResult = null
+                )
+            }
 
             try {
                 val serviceUrl = getCurrentServiceUrl()
@@ -221,7 +231,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update {
                     it.copy(
                         isPairing = false,
-                        lastOperationResult = OperationResult(false, e.message ?: "配对失败", OperationType.PAIR)
+                        lastOperationResult = OperationResult(
+                            false,
+                            e.message ?: "配对失败",
+                            OperationType.PAIR
+                        )
                     )
                 }
             }
@@ -247,7 +261,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun launchScrcpy(mode: ScrcpyLaunchMode) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLaunchingScrcpy = true, showScrcpyDialog = false, lastOperationResult = null) }
+            _uiState.update {
+                it.copy(
+                    isLaunchingScrcpy = true,
+                    showScrcpyDialog = false,
+                    lastOperationResult = null
+                )
+            }
 
             try {
                 val serviceUrl = getCurrentServiceUrl()
@@ -268,7 +288,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update {
                     it.copy(
                         isLaunchingScrcpy = false,
-                        lastOperationResult = OperationResult(false, e.message ?: "启动失败", OperationType.SCRCPY)
+                        lastOperationResult = OperationResult(
+                            false,
+                            e.message ?: "启动失败",
+                            OperationType.SCRCPY
+                        )
                     )
                 }
             }

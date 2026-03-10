@@ -100,7 +100,13 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                 discoveredServices = uiState.discoveredServices,
                 selectedService = uiState.selectedService,
                 discoveryError = uiState.discoveryError,
-                onServiceSelect = { viewModel.selectService(it) },
+                onServiceSelect = {
+                    if (viewModel.uiState.value.selectedService == it) {
+                        viewModel.selectService(null)
+                    } else {
+                        viewModel.selectService(it)
+                    }
+                },
                 onStartDiscovery = { viewModel.startDiscovery() },
                 onStopDiscovery = { viewModel.stopDiscovery() },
                 modifier = Modifier.padding(16.dp)
@@ -448,7 +454,7 @@ fun OperationButtons(
             value = connectAddress,
             onValueChange = { connectAddress = it },
             label = { Text("ADB 设备地址") },
-            placeholder = { Text("例如: 192.168.1.50:5555") },
+            placeholder = { Text("例如: 192.168.1.50:5555, 留空自动获取") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             leadingIcon = {
@@ -632,7 +638,7 @@ fun PairDialog(
                 OutlinedTextField(
                     value = address,
                     onValueChange = { address = it },
-                    label = { Text("设备地址") },
+                    label = { Text("设备地址 (留空自动获取)") },
                     placeholder = { Text("例如: 192.168.1.50:37123") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -641,7 +647,7 @@ fun PairDialog(
                 OutlinedTextField(
                     value = pairCode,
                     onValueChange = onPairCodeChange,
-                    label = { Text("配对码") },
+                    label = { Text("配对码 (留空自动获取)") },
                     placeholder = { Text("6位数字配对码") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -651,7 +657,7 @@ fun PairDialog(
         confirmButton = {
             Button(
                 onClick = { onConfirm(address, pairCode) },
-                enabled = address.isNotBlank() && pairCode.isNotBlank()
+                // enabled = address.isNotBlank() && pairCode.isNotBlank()
             ) {
                 Text("配对")
             }
