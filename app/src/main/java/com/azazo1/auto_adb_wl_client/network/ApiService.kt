@@ -1,8 +1,10 @@
 package com.azazo1.auto_adb_wl_client.network
 
 import com.azazo1.auto_adb_wl_client.data.AdbConnectRequest
+import com.azazo1.auto_adb_wl_client.data.AdbDisconnectRequest
 import com.azazo1.auto_adb_wl_client.data.AdbPairRequest
 import com.azazo1.auto_adb_wl_client.data.ScrcpyLaunchRequest
+import com.azazo1.auto_adb_wl_client.data.ServerResponse
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -17,13 +19,16 @@ import java.util.concurrent.TimeUnit
  */
 interface ApiService {
     @POST("/adb/connect")
-    suspend fun adbConnect(@Body request: AdbConnectRequest): String
+    suspend fun adbConnect(@Body request: AdbConnectRequest): ServerResponse
+
+    @POST("/adb/disconnect")
+    suspend fun adbDisconnect(@Body request: AdbDisconnectRequest): ServerResponse
 
     @POST("/adb/pair")
-    suspend fun adbPair(@Body request: AdbPairRequest): String
+    suspend fun adbPair(@Body request: AdbPairRequest): ServerResponse
 
     @POST("/scrcpy/launch")
-    suspend fun scrcpyLaunch(@Body request: ScrcpyLaunchRequest): String
+    suspend fun scrcpyLaunch(@Body request: ScrcpyLaunchRequest): ServerResponse
 
     companion object {
         private val json = Json {

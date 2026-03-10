@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.azazo1.auto_adb_wl_client.data.AdbConnectRequest
+import com.azazo1.auto_adb_wl_client.data.AdbDisconnectRequest
 import com.azazo1.auto_adb_wl_client.data.AdbPairRequest
 import com.azazo1.auto_adb_wl_client.data.DiscoveredService
 import com.azazo1.auto_adb_wl_client.data.ScrcpyLaunchMode
@@ -35,6 +36,7 @@ data class UiState(
     val isConnecting: Boolean = false,
     val isPairing: Boolean = false,
     val isLaunchingScrcpy: Boolean = false,
+    val isDisconnecting: Boolean = false,
 
     // 操作结果
     val lastOperationResult: OperationResult? = null,
@@ -82,7 +84,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         discoveryJob = viewModelScope.launch {
             try {
                 mdnsDiscovery.discoverServices().collect { services ->
-                    _uiState.update { it.copy(discoveredServices = services) }
+                    _uiState.update { it.copy(discoveredServices = services, selectedService = null) }
                 }
             } catch (e: Exception) {
                 _uiState.update {
@@ -159,7 +161,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update {
                     it.copy(
                         isConnecting = false,
-                        lastOperationResult = OperationResult(true, result, OperationType.CONNECT)
+                        lastOperationResult = OperationResult(result.ok, result.message, OperationType.CONNECT)
                     )
                 }
             } catch (e: Exception) {
@@ -169,6 +171,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         lastOperationResult = OperationResult(
                             false,
                             e.message ?: "连接失败",
+                            OperationType.CONNECT
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * ADB 断连
+     */
+    fun adbDisconnect(target: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isConnecting = true, lastOperationResult = null) }
+
+            try {
+                val serviceUrl = getCurrentServiceUrl()
+                    ?: throw Exception("请选择服务或输入地址")
+
+                val api = ApiService.create(serviceUrl)
+                val result = api.adbDisconnect(
+                    AdbDisconnectRequest(target)
+                )
+
+                _uiState.update {
+                    it.copy(
+                        isConnecting = false,
+                        lastOperationResult = OperationResult(result.ok, result.message, OperationType.CONNECT)
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isConnecting = false,
+                        lastOperationResult = OperationResult(
+                            false,
+                            e.message ?: "断连失败",
                             OperationType.CONNECT
                         )
                     )
@@ -224,7 +263,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update {
                     it.copy(
                         isPairing = false,
-                        lastOperationResult = OperationResult(true, result, OperationType.PAIR)
+                        lastOperationResult = OperationResult(result.ok, result.message, OperationType.PAIR)
                     )
                 }
             } catch (e: Exception) {
@@ -281,7 +320,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update {
                     it.copy(
                         isLaunchingScrcpy = false,
-                        lastOperationResult = OperationResult(true, result, OperationType.SCRCPY)
+                        lastOperationResult = OperationResult(result.ok, result.message, OperationType.SCRCPY)
                     )
                 }
             } catch (e: Exception) {

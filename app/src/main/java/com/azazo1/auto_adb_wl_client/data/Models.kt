@@ -11,6 +11,14 @@ data class AdbConnectRequest(
 )
 
 /**
+ * ADB 断连请求
+ */
+@Serializable
+data class AdbDisconnectRequest(
+    val target: String
+)
+
+/**
  * ADB 配对请求参数
  */
 @Serializable
@@ -43,8 +51,9 @@ data class ScrcpyLaunchMode(
 /**
  * 服务端响应
  */
+@Serializable
 data class ServerResponse(
-    val success: Boolean,
+    val ok: Boolean,
     val message: String
 )
 

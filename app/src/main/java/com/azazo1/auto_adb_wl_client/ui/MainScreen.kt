@@ -126,9 +126,11 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
             OperationButtons(
                 hasService = uiState.selectedService != null || uiState.manualAddress.isNotBlank(),
                 isConnecting = uiState.isConnecting,
+                isDisconnecting = uiState.isDisconnecting,
                 isPairing = uiState.isPairing,
                 isLaunchingScrcpy = uiState.isLaunchingScrcpy,
                 onConnect = { viewModel.adbConnect(it) },
+                onDisconnect = { viewModel.adbDisconnect(it) },
                 onShowPairDialog = { viewModel.showPairDialog() },
                 onShowScrcpyDialog = { viewModel.showScrcpyDialog() },
                 modifier = Modifier.padding(16.dp)
@@ -432,9 +434,11 @@ fun ManualAddressCard(
 fun OperationButtons(
     hasService: Boolean,
     isConnecting: Boolean,
+    isDisconnecting: Boolean,
     isPairing: Boolean,
     isLaunchingScrcpy: Boolean,
     onConnect: (String) -> Unit,
+    onDisconnect: (String) -> Unit,
     onShowPairDialog: () -> Unit,
     onShowScrcpyDialog: () -> Unit,
     modifier: Modifier = Modifier
@@ -474,7 +478,18 @@ fun OperationButtons(
                 text = "ADB 连接",
                 icon = Icons.Default.Link,
                 isLoading = isConnecting,
-                enabled = hasService && connectAddress.isNotBlank() && !isConnecting && !isPairing && !isLaunchingScrcpy,
+                enabled = hasService && connectAddress.isNotBlank() && !isConnecting && !isDisconnecting && !isPairing && !isLaunchingScrcpy,
+                onClick = { onConnect(connectAddress) },
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.primary
+            )
+
+            // 连接按钮
+            OperationButton(
+                text = "ADB 断连",
+                icon = Icons.Default.Close,
+                isLoading = isDisconnecting,
+                enabled = hasService && connectAddress.isNotBlank() && !isConnecting && !isDisconnecting && !isPairing && !isLaunchingScrcpy,
                 onClick = { onConnect(connectAddress) },
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.primary
@@ -485,7 +500,7 @@ fun OperationButtons(
                 text = "ADB 配对",
                 icon = Icons.Default.ConnectingAirports, // Pair
                 isLoading = isPairing,
-                enabled = hasService && !isConnecting && !isPairing && !isLaunchingScrcpy,
+                enabled = hasService && !isConnecting && !isDisconnecting  && !isPairing && !isLaunchingScrcpy,
                 onClick = onShowPairDialog,
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.secondary
