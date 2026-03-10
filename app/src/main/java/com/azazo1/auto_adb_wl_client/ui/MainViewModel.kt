@@ -3,6 +3,7 @@ package com.azazo1.auto_adb_wl_client.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.azazo1.auto_adb_wl_client.accessibility.MyAccessibilityService
 import com.azazo1.auto_adb_wl_client.data.AdbConnectRequest
 import com.azazo1.auto_adb_wl_client.data.AdbDisconnectRequest
 import com.azazo1.auto_adb_wl_client.data.AdbPairRequest
@@ -41,12 +42,11 @@ data class UiState(
     // 操作结果
     val lastOperationResult: OperationResult? = null,
 
-    // 配对对话框
-    val showPairDialog: Boolean = false,
-    val pairCode: String = "",
-
     // Scrcpy 模式选择
-    val showScrcpyDialog: Boolean = false
+    val showScrcpyDialog: Boolean = false,
+
+    // adb
+    val adbAddress: String = ""
 )
 
 /**
@@ -84,7 +84,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         discoveryJob = viewModelScope.launch {
             try {
                 mdnsDiscovery.discoverServices().collect { services ->
-                    _uiState.update { it.copy(discoveredServices = services, selectedService = null) }
+                    _uiState.update {
+                        it.copy(
+                            discoveredServices = services,
+                            selectedService = null
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.update {
@@ -128,6 +133,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * 更新 adb 地址
+     */
+    fun updateAdbAddress(address: String) {
+        _uiState.update { it.copy(adbAddress = address) }
+    }
+
+    /**
      * 获取当前有效的服务 URL
      */
     private fun getCurrentServiceUrl(): String? {
@@ -145,7 +157,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * ADB 连接
      */
-    fun adbConnect(address: String) {
+    fun adbConnect() {
+        var address = _uiState.value.adbAddress
         viewModelScope.launch {
             _uiState.update { it.copy(isConnecting = true, lastOperationResult = null) }
 
@@ -154,6 +167,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     ?: throw Exception("请选择服务或输入地址")
 
                 val api = ApiService.create(serviceUrl)
+
+                if (address.isEmpty()) {
+                    if (MyAccessibilityService.instance == null) {
+                        throw Exception("没有无障碍权限")
+                    }
+                    address = MyAccessibilityService.instance!!.fetchADBAddress()
+                        ?: throw Exception("无法获取 adb 地址")
+                    _uiState.update { it.copy(adbAddress = address) }
+                }
+
                 val result = api.adbConnect(
                     AdbConnectRequest(address)
                 )
@@ -161,7 +184,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update {
                     it.copy(
                         isConnecting = false,
-                        lastOperationResult = OperationResult(result.ok, result.message, OperationType.CONNECT)
+                        lastOperationResult = OperationResult(
+                            result.ok,
+                            result.message,
+                            OperationType.CONNECT
+                        )
                     )
                 }
             } catch (e: Exception) {
@@ -182,29 +209,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * ADB 断连
      */
-    fun adbDisconnect(target: String) {
+    fun adbDisconnect() {
+        var target = _uiState.value.adbAddress
         viewModelScope.launch {
-            _uiState.update { it.copy(isConnecting = true, lastOperationResult = null) }
+            _uiState.update { it.copy(isDisconnecting = true, lastOperationResult = null) }
 
             try {
                 val serviceUrl = getCurrentServiceUrl()
                     ?: throw Exception("请选择服务或输入地址")
 
                 val api = ApiService.create(serviceUrl)
+
+                if (target.isEmpty()) {
+                    if (MyAccessibilityService.instance == null) {
+                        throw Exception("没有无障碍权限")
+                    }
+                    target = MyAccessibilityService.instance!!.fetchADBAddress() ?: throw Exception(
+                        "无法获取 adb 地址"
+                    )
+                    _uiState.update { it.copy(adbAddress = target) }
+                }
+
                 val result = api.adbDisconnect(
                     AdbDisconnectRequest(target)
                 )
 
                 _uiState.update {
                     it.copy(
-                        isConnecting = false,
-                        lastOperationResult = OperationResult(result.ok, result.message, OperationType.CONNECT)
+                        isDisconnecting = false,
+                        lastOperationResult = OperationResult(
+                            result.ok,
+                            result.message,
+                            OperationType.CONNECT
+                        )
                     )
                 }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
-                        isConnecting = false,
+                        isDisconnecting = false,
                         lastOperationResult = OperationResult(
                             false,
                             e.message ?: "断连失败",
@@ -217,36 +260,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 显示配对对话框
-     */
-    fun showPairDialog() {
-        _uiState.update { it.copy(showPairDialog = true, pairCode = "") }
-    }
-
-    /**
-     * 隐藏配对对话框
-     */
-    fun hidePairDialog() {
-        _uiState.update { it.copy(showPairDialog = false, pairCode = "") }
-    }
-
-    /**
-     * 更新配对码
-     */
-    fun updatePairCode(code: String) {
-        _uiState.update { it.copy(pairCode = code) }
-    }
-
-    /**
      * 执行配对
      */
-    // todo 无障碍获取信息
-    fun adbPair(address: String, pairCode: String) {
+    fun adbPair() {
         viewModelScope.launch {
             _uiState.update {
                 it.copy(
                     isPairing = true,
-                    showPairDialog = false,
                     lastOperationResult = null
                 )
             }
@@ -256,14 +276,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     ?: throw Exception("请选择服务或输入地址")
 
                 val api = ApiService.create(serviceUrl)
-                val result = api.adbPair(
-                    AdbPairRequest(address, pairCode)
-                )
+                if (MyAccessibilityService.instance == null) {
+                    throw Exception("没有无障碍权限")
+                }
+                val result =
+                    MyAccessibilityService.instance!!.pairADB pairAction@{ addr: String, code: String ->
+                        api.adbPair(
+                            AdbPairRequest(addr, code)
+                        )
+                    }
+                if (result == null) {
+                    throw Exception("无法获取无线 adb 配对信息")
+                }
 
                 _uiState.update {
                     it.copy(
                         isPairing = false,
-                        lastOperationResult = OperationResult(result.ok, result.message, OperationType.PAIR)
+                        lastOperationResult = OperationResult(
+                            result.ok,
+                            result.message,
+                            OperationType.PAIR
+                        )
                     )
                 }
             } catch (e: Exception) {
@@ -320,7 +353,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update {
                     it.copy(
                         isLaunchingScrcpy = false,
-                        lastOperationResult = OperationResult(result.ok, result.message, OperationType.SCRCPY)
+                        lastOperationResult = OperationResult(
+                            result.ok,
+                            result.message,
+                            OperationType.SCRCPY
+                        )
                     )
                 }
             } catch (e: Exception) {

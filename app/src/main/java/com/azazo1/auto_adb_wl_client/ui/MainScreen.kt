@@ -1,8 +1,10 @@
 package com.azazo1.auto_adb_wl_client.ui
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -29,6 +31,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.azazo1.auto_adb_wl_client.accessibility.MyAccessibilityService
 import com.azazo1.auto_adb_wl_client.data.DiscoveredService
 import com.azazo1.auto_adb_wl_client.data.ScrcpyLaunchMode
 
@@ -128,15 +131,17 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
 
             // 操作按钮
             OperationButtons(
+                adbAddress = uiState.adbAddress,
                 hasService = uiState.selectedService != null || uiState.manualAddress.isNotBlank(),
                 isConnecting = uiState.isConnecting,
                 isDisconnecting = uiState.isDisconnecting,
                 isPairing = uiState.isPairing,
                 isLaunchingScrcpy = uiState.isLaunchingScrcpy,
-                onConnect = { viewModel.adbConnect(it) },
-                onDisconnect = { viewModel.adbDisconnect(it) },
-                onShowPairDialog = { viewModel.showPairDialog() },
+                onConnect = { viewModel.adbConnect() },
+                onDisconnect = { viewModel.adbDisconnect() },
+                onPair = { viewModel.adbPair() },
                 onShowScrcpyDialog = { viewModel.showScrcpyDialog() },
+                onAdbAddressChange = { viewModel.updateAdbAddress(it) },
                 modifier = Modifier.padding(16.dp)
             )
 
@@ -149,16 +154,6 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                 )
             }
         }
-    }
-
-    // 配对对话框
-    if (uiState.showPairDialog) {
-        PairDialog(
-            pairCode = uiState.pairCode,
-            onPairCodeChange = { viewModel.updatePairCode(it) },
-            onDismiss = { viewModel.hidePairDialog() },
-            onConfirm = { address, code -> viewModel.adbPair(address, code) }
-        )
     }
 
     // Scrcpy 模式选择对话框
@@ -436,19 +431,19 @@ fun ManualAddressCard(
  */
 @Composable
 fun OperationButtons(
+    adbAddress: String,
     hasService: Boolean,
     isConnecting: Boolean,
     isDisconnecting: Boolean,
     isPairing: Boolean,
     isLaunchingScrcpy: Boolean,
-    onConnect: (String) -> Unit,
-    onDisconnect: (String) -> Unit,
-    onShowPairDialog: () -> Unit,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit,
+    onPair: () -> Unit,
     onShowScrcpyDialog: () -> Unit,
+    onAdbAddressChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var connectAddress by remember { mutableStateOf("") }
-
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = "操作",
@@ -459,10 +454,10 @@ fun OperationButtons(
 
         // 连接地址输入
         OutlinedTextField(
-            value = connectAddress,
-            onValueChange = { connectAddress = it },
-            label = { Text("ADB 设备地址") },
-            placeholder = { Text("例如: 192.168.1.50:5555, 留空自动获取") },
+            value = adbAddress,
+            onValueChange = onAdbAddressChange,
+            label = { Text("ADB 设备地址 (留空自动获取)") },
+            placeholder = { Text("例如: 192.168.1.50:5555") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             leadingIcon = {
@@ -482,8 +477,8 @@ fun OperationButtons(
                 text = "ADB 连接",
                 icon = Icons.Default.Link,
                 isLoading = isConnecting,
-                enabled = hasService && connectAddress.isNotBlank() && !isConnecting && !isDisconnecting && !isPairing && !isLaunchingScrcpy,
-                onClick = { onConnect(connectAddress) },
+                enabled = hasService && !isConnecting && !isDisconnecting && !isPairing && !isLaunchingScrcpy,
+                onClick = { onConnect() },
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.primary
             )
@@ -493,8 +488,8 @@ fun OperationButtons(
                 text = "ADB 断连",
                 icon = Icons.Default.Close,
                 isLoading = isDisconnecting,
-                enabled = hasService && connectAddress.isNotBlank() && !isConnecting && !isDisconnecting && !isPairing && !isLaunchingScrcpy,
-                onClick = { onConnect(connectAddress) },
+                enabled = hasService && !isConnecting && !isDisconnecting && !isPairing && !isLaunchingScrcpy,
+                onClick = { onDisconnect() },
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.primary
             )
@@ -504,8 +499,8 @@ fun OperationButtons(
                 text = "ADB 配对",
                 icon = Icons.Default.ConnectingAirports, // Pair
                 isLoading = isPairing,
-                enabled = hasService && !isConnecting && !isDisconnecting  && !isPairing && !isLaunchingScrcpy,
-                onClick = onShowPairDialog,
+                enabled = hasService && !isConnecting && !isDisconnecting && !isPairing && !isLaunchingScrcpy,
+                onClick = onPair,
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.secondary
             )
@@ -523,6 +518,23 @@ fun OperationButtons(
             modifier = Modifier.fillMaxWidth(),
             containerColor = MaterialTheme.colorScheme.tertiary
         )
+
+        if (MyAccessibilityService.instance == null) {
+            Spacer(modifier = Modifier.height(8.dp))
+
+            val ctx = LocalContext.current
+            OperationButton(
+                text = "打开无障碍设置",
+                icon = Icons.Default.AccessibilityNew,
+                isLoading = false,
+                enabled = true,
+                onClick = {
+                    ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                },
+                modifier = Modifier.fillMaxWidth(),
+                containerColor = MaterialTheme.colorScheme.error
+            )
+        }
     }
 }
 
@@ -629,64 +641,6 @@ fun OperationResultCard(
             }
         }
     }
-}
-
-/**
- * 配对对话框
- */
-@Composable
-fun PairDialog(
-    pairCode: String,
-    onPairCodeChange: (String) -> Unit,
-    onDismiss: () -> Unit,
-    onConfirm: (String, String) -> Unit
-) {
-    var address by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.ConnectingAirports /* Pair */, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("ADB 配对")
-            }
-        },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = address,
-                    onValueChange = { address = it },
-                    label = { Text("设备地址 (留空自动获取)") },
-                    placeholder = { Text("例如: 192.168.1.50:37123") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = pairCode,
-                    onValueChange = onPairCodeChange,
-                    label = { Text("配对码 (留空自动获取)") },
-                    placeholder = { Text("6位数字配对码") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(address, pairCode) },
-                // enabled = address.isNotBlank() && pairCode.isNotBlank()
-            ) {
-                Text("配对")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        }
-    )
 }
 
 /**
