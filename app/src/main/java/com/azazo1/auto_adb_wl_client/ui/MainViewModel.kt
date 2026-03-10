@@ -3,10 +3,13 @@ package com.azazo1.auto_adb_wl_client.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.autoadb.client.data.DiscoveredService
-import com.autoadb.client.data.ScrcpyLaunchMode
+import com.azazo1.auto_adb_wl_client.data.AdbConnectRequest
+import com.azazo1.auto_adb_wl_client.data.AdbPairRequest
+import com.azazo1.auto_adb_wl_client.data.DiscoveredService
+import com.azazo1.auto_adb_wl_client.data.ScrcpyLaunchMode
+import com.azazo1.auto_adb_wl_client.data.ScrcpyLaunchRequest
 import com.azazo1.auto_adb_wl_client.discovery.MdnsDiscovery
-import com.autoadb.client.network.ApiService
+import com.azazo1.auto_adb_wl_client.network.ApiService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,7 +27,7 @@ data class UiState(
     val discoveryError: String? = null,
 
     // 当前选中的服务
-    val selectedService: DiscoveredService? = null,
+    val selectedService: Int? = null,
     val manualAddress: String = "",
     val manualPort: String = "21300",
 
@@ -104,7 +107,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * 选择服务
      */
-    fun selectService(service: DiscoveredService) {
+    fun selectService(service: Int) {
         _uiState.update { it.copy(selectedService = service) }
     }
 
@@ -127,10 +130,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun getCurrentServiceUrl(): String? {
         val state = _uiState.value
-        return state.selectedService?.baseUrl
-            ?: if (state.manualAddress.isNotBlank()) {
-                "http://${state.manualAddress}:${state.manualPort}"
-            } else null
+        if (state.selectedService != null) {
+            return state.discoveredServices[state.selectedService].baseUrl; }
+        else {
+            if (state.manualAddress.isNotBlank()) {
+                return "http://${state.manualAddress}:${state.manualPort}"
+            } else {
+                return null
+            }
+        }
     }
 
     /**
@@ -146,7 +154,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 val api = ApiService.create(serviceUrl)
                 val result = api.adbConnect(
-                    com.autoadb.client.data.AdbConnectRequest(address)
+                    AdbConnectRequest(address)
                 )
 
                 _uiState.update {
@@ -200,7 +208,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 val api = ApiService.create(serviceUrl)
                 val result = api.adbPair(
-                    com.autoadb.client.data.AdbPairRequest(address, pairCode)
+                    AdbPairRequest(address, pairCode)
                 )
 
                 _uiState.update {
@@ -247,7 +255,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 val api = ApiService.create(serviceUrl)
                 val result = api.scrcpyLaunch(
-                    com.autoadb.client.data.ScrcpyLaunchRequest(mode)
+                    ScrcpyLaunchRequest(mode)
                 )
 
                 _uiState.update {
