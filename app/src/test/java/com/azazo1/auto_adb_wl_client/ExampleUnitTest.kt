@@ -1,4 +1,4 @@
-package com.azazo1.auto_adb_wl
+package com.azazo1.auto_adb_wl_client
 
 import org.junit.Test
 

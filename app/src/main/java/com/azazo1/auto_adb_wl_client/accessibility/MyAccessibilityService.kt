@@ -1,4 +1,4 @@
-package com.azazo1.auto_adb_wl
+package com.azazo1.auto_adb_wl_client.accessibility
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
@@ -118,7 +118,7 @@ class MyAccessibilityService : AccessibilityService() {
         }
     }
 
-    suspend fun pairADB(pairAction: suspend (pairAddress: String, pairCode: String) -> Boolean): Boolean {
+    suspend fun <T> pairADB(pairAction: suspend (pairAddress: String, pairCode: String) -> T): T? {
         return runInWirelessDebugMenu {
             // 从无线调试页面提取IP地址和端口号文本, 确保当前在无线调试页面
             var debugAddress = findDebugAddressText()  // 尝试匹配形如 "192.168.x.x:port" 的文本
@@ -136,15 +136,15 @@ class MyAccessibilityService : AccessibilityService() {
             }
             // 进入 pair 界面
             val pairBtn =
-                findNodeByText("使用配对码配对设备") ?: return@runInWirelessDebugMenu false
+                findNodeByText("使用配对码配对设备") ?: return@runInWirelessDebugMenu null
             clickNode(pairBtn)
             findNodeByText("WLAN 配对码") // 等待页面加载
-            val code = findDebugPairCode() ?: return@runInWirelessDebugMenu false
-            val addr = findDebugAddressText() ?: return@runInWirelessDebugMenu false
+            val code = findDebugPairCode() ?: return@runInWirelessDebugMenu null
+            val addr = findDebugAddressText() ?: return@runInWirelessDebugMenu null
             val rst = pairAction(addr, code)
             performBack()
             return@runInWirelessDebugMenu rst
-        } ?: false
+        }
     }
 
     /**
