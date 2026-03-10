@@ -159,6 +159,7 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
     // Scrcpy 模式选择对话框
     if (uiState.showScrcpyDialog) {
         ScrcpyModeDialog(
+            adbAddress = uiState.adbAddress,
             onDismiss = { viewModel.hideScrcpyDialog() },
             onConfirm = { mode -> viewModel.launchScrcpy(mode) }
         )
@@ -648,12 +649,13 @@ fun OperationResultCard(
  */
 @Composable
 fun ScrcpyModeDialog(
+    adbAddress: String,
     onDismiss: () -> Unit,
     onConfirm: (ScrcpyLaunchMode) -> Unit
 ) {
-    var selectedMode by remember { mutableStateOf(ScrcpyMode.USB) }
+    var selectedMode by remember { mutableStateOf(if (adbAddress.isEmpty()) ScrcpyMode.TCP_IP else ScrcpyMode.TCP_IP_CONNECT) }
     var serialNumber by remember { mutableStateOf("") }
-    var tcpAddress by remember { mutableStateOf("") }
+    var tcpAddress by remember { mutableStateOf(adbAddress) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -671,7 +673,7 @@ fun ScrcpyModeDialog(
 
                 // 模式选项
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    ScrcpyMode.values().forEach { mode ->
+                    ScrcpyMode.entries.forEach { mode ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
