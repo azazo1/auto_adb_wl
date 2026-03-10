@@ -34,6 +34,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.azazo1.auto_adb_wl_client.accessibility.MyAccessibilityService
 import com.azazo1.auto_adb_wl_client.data.DiscoveredService
 import com.azazo1.auto_adb_wl_client.data.ScrcpyLaunchMode
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -445,6 +446,14 @@ fun OperationButtons(
     onAdbAddressChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val accessibilityInstance by produceState<MyAccessibilityService?>(null) {
+        while (true) {
+            if (value != MyAccessibilityService.instance) {
+                value = MyAccessibilityService.instance
+            }
+            delay(500)
+        }
+    }
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = "操作",
@@ -520,7 +529,7 @@ fun OperationButtons(
             containerColor = MaterialTheme.colorScheme.tertiary
         )
 
-        if (MyAccessibilityService.instance == null) {
+        if (accessibilityInstance == null) {
             Spacer(modifier = Modifier.height(8.dp))
 
             val ctx = LocalContext.current
