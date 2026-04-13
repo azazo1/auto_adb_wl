@@ -13,6 +13,7 @@ import com.azazo1.auto_adb_wl_client.data.ScrcpyLaunchMode
 import com.azazo1.auto_adb_wl_client.data.ScrcpyLaunchRequest
 import com.azazo1.auto_adb_wl_client.discovery.MdnsDiscovery
 import com.azazo1.auto_adb_wl_client.network.ApiService
+import com.azazo1.auto_adb_wl_client.util.NetworkUtils
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -163,6 +164,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(adbAddress = address) }
     }
 
+    private fun ensureWifiConnectedForWirelessAdb() {
+        if (!NetworkUtils.isWifiConnected(getApplication())) {
+            throw Exception("当前未连接 Wi‑Fi，无法获取无线 ADB 监听地址")
+        }
+    }
+
     /**
      * 获取当前有效的服务 URL
      */
@@ -196,6 +203,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (MyAccessibilityService.instance == null) {
                         throw Exception("没有无障碍权限")
                     }
+                    ensureWifiConnectedForWirelessAdb()
                     address = MyAccessibilityService.instance!!.fetchADBAddress()
                         ?: throw Exception("无法获取 adb 地址")
                     _uiState.update { it.copy(adbAddress = address) }
@@ -248,6 +256,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (MyAccessibilityService.instance == null) {
                         throw Exception("没有无障碍权限")
                     }
+                    ensureWifiConnectedForWirelessAdb()
                     target = MyAccessibilityService.instance!!.fetchADBAddress() ?: throw Exception(
                         "无法获取 adb 地址"
                     )

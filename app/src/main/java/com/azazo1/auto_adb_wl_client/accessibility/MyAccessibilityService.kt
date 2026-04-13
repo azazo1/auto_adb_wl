@@ -8,6 +8,7 @@ import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.azazo1.auto_adb_wl_client.util.NetworkUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -98,6 +99,10 @@ class MyAccessibilityService : AccessibilityService() {
      * 打开开发者选项 -> 无线调试页面并获取无线调试地址
      */
     suspend fun fetchADBAddress(): String? {
+        if (!NetworkUtils.isWifiConnected(this)) {
+            Log.i(TAG, "skip fetching wireless adb address because wifi is disconnected")
+            return null
+        }
         return runInWirelessDebugMenu {
             // 从无线调试页面提取IP地址和端口号文本
             var debugAddress = findDebugAddressText()  // 尝试匹配形如 "192.168.x.x:port" 的文本
