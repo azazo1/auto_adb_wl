@@ -27,13 +27,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.azazo1.auto_adb_wl_client.R
 import com.azazo1.auto_adb_wl_client.accessibility.MyAccessibilityService
 import com.azazo1.auto_adb_wl_client.data.DiscoveredService
 import com.azazo1.auto_adb_wl_client.data.ScrcpyLaunchMode
@@ -406,19 +404,6 @@ fun ManualAddressCard(
                     }
                 )
 
-                FilledTonalIconButton(
-                    onClick = { showHistoryDialog = true },
-                    enabled = selectedService == null,
-                    modifier = Modifier
-                        .padding(top = 8.dp)
-                        .size(56.dp)
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_server_address_history),
-                        contentDescription = "服务器地址历史记录"
-                    )
-                }
-
                 OutlinedTextField(
                     value = manualPort,
                     onValueChange = onPortChange,
@@ -428,6 +413,20 @@ fun ManualAddressCard(
                     modifier = Modifier.weight(1f),
                     enabled = selectedService == null
                 )
+
+                FilledTonalIconButton(
+                    onClick = { showHistoryDialog = true },
+                    enabled = selectedService == null,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.History,
+                        contentDescription = "服务器地址历史记录",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
 
             if (selectedService != null) {
@@ -476,7 +475,7 @@ private fun ServerAddressHistoryDialog(
         onDismissRequest = onDismiss,
         icon = {
             Icon(
-                painter = painterResource(R.drawable.ic_server_address_history),
+                imageVector = Icons.Default.History,
                 contentDescription = null
             )
         },
