@@ -97,6 +97,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update { it.copy(serverAddressHistory = history) }
             }
         }
+        viewModelScope.launch {
+            var initialized = false
+            var lastWifiIdentity: String? = null
+
+            NetworkUtils.observeWifiIdentity(getApplication()).collect { wifiIdentity ->
+                if (!initialized) {
+                    initialized = true
+                    lastWifiIdentity = wifiIdentity
+                    return@collect
+                }
+
+                val wifiDisconnected = lastWifiIdentity != null && wifiIdentity == null
+                val wifiChanged =
+                    lastWifiIdentity != null && wifiIdentity != null && lastWifiIdentity != wifiIdentity
+
+                if ((wifiDisconnected || wifiChanged) && _uiState.value.adbAddress.isNotEmpty()) {
+                    _uiState.update { it.copy(adbAddress = "") }
+                }
+
+                lastWifiIdentity = wifiIdentity
+            }
+        }
     }
 
     /**
