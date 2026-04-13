@@ -76,3 +76,12 @@ data class DiscoveredService(
     val baseUrl: String
         get() = "http://${addresses.firstOrNull() ?: host}:$port"
 }
+
+@Serializable
+data class ServerAddressHistory(
+    val address: String,
+    val port: String
+) {
+    val displayAddress: String
+        get() = "$address:$port"
+}

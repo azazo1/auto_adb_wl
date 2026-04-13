@@ -20,20 +20,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.azazo1.auto_adb_wl_client.R
 import com.azazo1.auto_adb_wl_client.accessibility.MyAccessibilityService
 import com.azazo1.auto_adb_wl_client.data.DiscoveredService
 import com.azazo1.auto_adb_wl_client.data.ScrcpyLaunchMode
+import com.azazo1.auto_adb_wl_client.data.ServerAddressHistory
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -124,8 +128,11 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
             ManualAddressCard(
                 manualAddress = uiState.manualAddress,
                 manualPort = uiState.manualPort,
+                serverAddressHistory = uiState.serverAddressHistory,
                 onAddressChange = { viewModel.updateManualAddress(it) },
                 onPortChange = { viewModel.updateManualPort(it) },
+                onHistorySelect = { viewModel.applyServerAddressHistory(it) },
+                onHistoryDelete = { viewModel.deleteServerAddressHistory(it) },
                 selectedService = uiState.selectedService,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
@@ -359,11 +366,16 @@ fun ServiceItem(
 fun ManualAddressCard(
     manualAddress: String,
     manualPort: String,
+    serverAddressHistory: List<ServerAddressHistory>,
     onAddressChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
+    onHistorySelect: (ServerAddressHistory) -> Unit,
+    onHistoryDelete: (ServerAddressHistory) -> Unit,
     selectedService: Int?,
     modifier: Modifier = Modifier
 ) {
+    var showHistoryDialog by rememberSaveable { mutableStateOf(false) }
+
     Card(
         modifier = modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -383,16 +395,29 @@ fun ManualAddressCard(
                 OutlinedTextField(
                     value = manualAddress,
                     onValueChange = onAddressChange,
-                    label = { Text("IP 地址") },
-                    placeholder = { Text("例如: 192.168.1.100") },
+                    label = { Text("服务器地址") },
+                    placeholder = { Text("例如: 192.168.1.100 或 my-server") },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                     modifier = Modifier.weight(2f),
                     enabled = selectedService == null,
                     leadingIcon = {
                         Icon(Icons.Default.Router, contentDescription = null)
                     }
                 )
+
+                FilledTonalIconButton(
+                    onClick = { showHistoryDialog = true },
+                    enabled = selectedService == null,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .size(56.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_server_address_history),
+                        contentDescription = "服务器地址历史记录"
+                    )
+                }
 
                 OutlinedTextField(
                     value = manualPort,
@@ -426,6 +451,96 @@ fun ManualAddressCard(
             }
         }
     }
+
+    if (showHistoryDialog) {
+        ServerAddressHistoryDialog(
+            historyEntries = serverAddressHistory,
+            onDismiss = { showHistoryDialog = false },
+            onSelect = { history ->
+                onHistorySelect(history)
+                showHistoryDialog = false
+            },
+            onDelete = onHistoryDelete
+        )
+    }
+}
+
+@Composable
+private fun ServerAddressHistoryDialog(
+    historyEntries: List<ServerAddressHistory>,
+    onDismiss: () -> Unit,
+    onSelect: (ServerAddressHistory) -> Unit,
+    onDelete: (ServerAddressHistory) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                painter = painterResource(R.drawable.ic_server_address_history),
+                contentDescription = null
+            )
+        },
+        title = { Text("服务器地址历史记录") },
+        text = {
+            if (historyEntries.isEmpty()) {
+                Text(
+                    text = "还没有历史记录。点击“连接”后，当前手动输入的服务器地址会自动保存到这里。",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 320.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(historyEntries.size) { index ->
+                        val history = historyEntries[index]
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            ),
+                            onClick = { onSelect(history) }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = history.address,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "端口 ${history.port}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { onDelete(history) }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "删除历史记录"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        }
+    )
 }
 
 /**

@@ -11,6 +11,7 @@ import com.azazo1.auto_adb_wl_client.data.DiscoveredService
 import com.azazo1.auto_adb_wl_client.data.PreferenceManager
 import com.azazo1.auto_adb_wl_client.data.ScrcpyLaunchMode
 import com.azazo1.auto_adb_wl_client.data.ScrcpyLaunchRequest
+import com.azazo1.auto_adb_wl_client.data.ServerAddressHistory
 import com.azazo1.auto_adb_wl_client.discovery.MdnsDiscovery
 import com.azazo1.auto_adb_wl_client.network.ApiService
 import com.azazo1.auto_adb_wl_client.util.NetworkUtils
@@ -47,6 +48,7 @@ data class UiState(
     val selectedService: Int? = null,
     val manualAddress: String = "",
     val manualPort: String = "21300",
+    val serverAddressHistory: List<ServerAddressHistory> = emptyList(),
 
     // 操作状态
     val isConnecting: Boolean = false,
@@ -88,6 +90,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             prefManager.manualPortFlow.collect { port ->
                 _uiState.update { it.copy(manualPort = port) }
+            }
+        }
+        viewModelScope.launch {
+            prefManager.serverAddressHistoryFlow.collect { history ->
+                _uiState.update { it.copy(serverAddressHistory = history) }
             }
         }
     }
@@ -142,9 +149,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun updateManualAddress(address: String) {
         _uiState.update { it.copy(manualAddress = address) }
-        viewModelScope.launch {
-            prefManager.saveManualInfo(address, _uiState.value.manualPort)
-        }
+        persistManualInfo(address = address)
     }
 
     /**
@@ -152,9 +157,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun updateManualPort(port: String) {
         _uiState.update { it.copy(manualPort = port) }
-        viewModelScope.launch {
-            prefManager.saveManualInfo(_uiState.value.manualAddress, port)
-        }
+        persistManualInfo(port = port)
     }
 
     /**
@@ -162,6 +165,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun updateAdbAddress(address: String) {
         _uiState.update { it.copy(adbAddress = address) }
+    }
+
+    fun applyServerAddressHistory(history: ServerAddressHistory) {
+        _uiState.update {
+            it.copy(
+                manualAddress = history.address,
+                manualPort = history.port,
+                selectedService = null
+            )
+        }
+        persistManualInfo(address = history.address, port = history.port)
+    }
+
+    fun deleteServerAddressHistory(history: ServerAddressHistory) {
+        viewModelScope.launch {
+            prefManager.removeServerAddressHistory(history)
+        }
     }
 
     private fun ensureWifiConnectedForWirelessAdb() {
@@ -176,13 +196,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun getCurrentServiceUrl(): String? {
         val state = _uiState.value
         if (state.selectedService != null) {
-            return state.discoveredServices[state.selectedService].baseUrl; } else {
-            if (state.manualAddress.isNotBlank()) {
-                return "http://${state.manualAddress}:${state.manualPort}"
-            } else {
-                return null
-            }
+            return state.discoveredServices[state.selectedService].baseUrl
         }
+
+        if (state.manualAddress.isNotBlank()) {
+            return "http://${state.manualAddress}:${state.manualPort}"
+        }
+
+        return null
     }
 
     /**
@@ -197,6 +218,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val serviceUrl = getCurrentServiceUrl()
                     ?: throw Exception("请选择服务或输入地址")
 
+                saveManualServerAddressHistoryIfNeeded()
                 val api = ApiService.create(serviceUrl)
 
                 if (address.isEmpty()) {
@@ -418,5 +440,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         discoveryJob?.cancel()
+    }
+
+    private fun persistManualInfo(
+        address: String = _uiState.value.manualAddress,
+        port: String = _uiState.value.manualPort
+    ) {
+        viewModelScope.launch {
+            prefManager.saveManualInfo(address, port)
+        }
+    }
+
+    private suspend fun saveManualServerAddressHistoryIfNeeded() {
+        val state = _uiState.value
+        if (state.selectedService != null) {
+            return
+        }
+
+        prefManager.addServerAddressHistory(
+            ServerAddressHistory(
+                address = state.manualAddress,
+                port = state.manualPort
+            )
+        )
     }
 }
