@@ -3,6 +3,7 @@ package com.azazo1.auto_adb_wl_client.discovery
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.util.Log
 import android.os.Build
 import android.os.ext.SdkExtensions
 import com.azazo1.auto_adb_wl_client.data.DiscoveredService
@@ -22,6 +23,7 @@ class MdnsDiscovery(context: Context) {
             services.clear()
             val resolveQueue = ArrayDeque<NsdServiceInfo>()
             var isResolving = false
+            Log.i(TAG, "mDNS discovery flow opened: serviceType=$SERVICE_TYPE")
 
             fun handleResolvedService(serviceInfo: NsdServiceInfo) {
                 val addresses = mutableListOf<String>()
@@ -42,7 +44,12 @@ class MdnsDiscovery(context: Context) {
                 )
 
                 services[serviceInfo.serviceName] = discovered
-                trySend(DiscoveredService.merge(services.values))
+                val merged = DiscoveredService.merge(services.values)
+                Log.i(
+                    TAG,
+                    "mDNS resolved service: name=${serviceInfo.serviceName}, host=${discovered.host}, port=${discovered.port}, addresses=${discovered.addresses.joinToString(",")}, merged=${merged.size}"
+                )
+                trySend(merged)
             }
 
             fun processNextInQueue() {
@@ -51,9 +58,11 @@ class MdnsDiscovery(context: Context) {
                 }
                 isResolving = true
                 val nextService = resolveQueue.poll()
+                Log.i(TAG, "mDNS resolving queued service: name=${nextService.serviceName}")
 
                 nsdManager.resolveService(nextService, object : NsdManager.ResolveListener {
                     override fun onResolveFailed(si: NsdServiceInfo, errorCode: Int) {
+                        Log.w(TAG, "mDNS resolve failed: name=${si.serviceName}, errorCode=$errorCode")
                         isResolving = false
                         processNextInQueue()
                     }
@@ -67,9 +76,12 @@ class MdnsDiscovery(context: Context) {
             }
 
             val discoveryListener = object : NsdManager.DiscoveryListener {
-                override fun onDiscoveryStarted(regType: String) {}
+                override fun onDiscoveryStarted(regType: String) {
+                    Log.i(TAG, "mDNS discovery started: regType=$regType")
+                }
 
                 override fun onServiceFound(service: NsdServiceInfo) {
+                    Log.i(TAG, "mDNS service found: name=${service.serviceName}, type=${service.serviceType}")
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
                         SdkExtensions.getExtensionVersion(Build.VERSION_CODES.TIRAMISU) >= 7
                     ) {
@@ -77,7 +89,12 @@ class MdnsDiscovery(context: Context) {
                             service,
                             { it.run() },
                             object : NsdManager.ServiceInfoCallback {
-                                override fun onServiceInfoCallbackRegistrationFailed(errorCode: Int) {}
+                                override fun onServiceInfoCallbackRegistrationFailed(errorCode: Int) {
+                                    Log.w(
+                                        TAG,
+                                        "mDNS service info callback registration failed: name=${service.serviceName}, errorCode=$errorCode"
+                                    )
+                                }
 
                                 override fun onServiceUpdated(si: NsdServiceInfo) {
                                     handleResolvedService(si)
@@ -85,10 +102,14 @@ class MdnsDiscovery(context: Context) {
 
                                 override fun onServiceLost() {
                                     services.remove(service.serviceName)
-                                    trySend(DiscoveredService.merge(services.values))
+                                    val merged = DiscoveredService.merge(services.values)
+                                    Log.i(TAG, "mDNS service lost via callback: name=${service.serviceName}, merged=${merged.size}")
+                                    trySend(merged)
                                 }
 
-                                override fun onServiceInfoCallbackUnregistered() {}
+                                override fun onServiceInfoCallbackUnregistered() {
+                                    Log.i(TAG, "mDNS service info callback unregistered: name=${service.serviceName}")
+                                }
                             }
                         )
                     } else {
@@ -99,16 +120,22 @@ class MdnsDiscovery(context: Context) {
 
                 override fun onServiceLost(service: NsdServiceInfo) {
                     services.remove(service.serviceName)
-                    trySend(DiscoveredService.merge(services.values))
+                    val merged = DiscoveredService.merge(services.values)
+                    Log.i(TAG, "mDNS service lost: name=${service.serviceName}, merged=${merged.size}")
+                    trySend(merged)
                 }
 
-                override fun onDiscoveryStopped(serviceType: String) {}
+                override fun onDiscoveryStopped(serviceType: String) {
+                    Log.i(TAG, "mDNS discovery stopped: serviceType=$serviceType")
+                }
 
                 override fun onStartDiscoveryFailed(st: String, err: Int) {
+                    Log.e(TAG, "mDNS discovery start failed: serviceType=$st, errorCode=$err")
                     close()
                 }
 
                 override fun onStopDiscoveryFailed(st: String, err: Int) {
+                    Log.e(TAG, "mDNS discovery stop failed: serviceType=$st, errorCode=$err")
                     close()
                 }
             }
@@ -120,10 +147,12 @@ class MdnsDiscovery(context: Context) {
                     discoveryListener
                 )
             } catch (e: Exception) {
+                Log.e(TAG, "mDNS discoverServices threw an exception", e)
                 close(e)
             }
 
             awaitClose {
+                Log.i(TAG, "mDNS discovery flow closing")
                 try {
                     nsdManager.stopServiceDiscovery(discoveryListener)
                 } catch (_: Exception) {
@@ -132,6 +161,7 @@ class MdnsDiscovery(context: Context) {
         }
 
     companion object {
+        private const val TAG = "MdnsDiscovery"
         private const val SERVICE_TYPE = "_http._tcp."
     }
 }
