@@ -12,9 +12,10 @@ import com.azazo1.auto_adb_wl_client.data.PreferenceManager
 import com.azazo1.auto_adb_wl_client.data.ScrcpyLaunchMode
 import com.azazo1.auto_adb_wl_client.data.ScrcpyLaunchRequest
 import com.azazo1.auto_adb_wl_client.data.ServerAddressHistory
-import com.azazo1.auto_adb_wl_client.discovery.MdnsDiscovery
+import com.azazo1.auto_adb_wl_client.discovery.MultiSourceDiscovery
 import com.azazo1.auto_adb_wl_client.network.ApiService
 import com.azazo1.auto_adb_wl_client.util.NetworkUtils
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -70,19 +71,16 @@ data class UiState(
  * 主 ViewModel
  */
 class MainViewModel(application: Application) : AndroidViewModel(application) {
-    // 初始化 PreferenceManager
     private val prefManager = PreferenceManager(application)
 
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    private val mdnsDiscovery = MdnsDiscovery(application)
+    private val serviceDiscovery = MultiSourceDiscovery(application)
     private var discoveryJob: Job? = null
 
     init {
-        // 初始化时从本地加载
         viewModelScope.launch {
-            // 合并读取两个字段并更新 UI
             prefManager.manualAddressFlow.collect { addr ->
                 _uiState.update { it.copy(manualAddress = addr) }
             }
@@ -131,20 +129,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         discoveryJob = viewModelScope.launch {
             try {
-                mdnsDiscovery.discoverServices().collect { services ->
-                    _uiState.update {
-                        it.copy(
+                serviceDiscovery.discoverServices().collect { services ->
+                    _uiState.update { state ->
+                        val selectedBaseUrl = state.selectedService
+                            ?.let(state.discoveredServices::getOrNull)
+                            ?.baseUrl
+                        val nextSelectedService = selectedBaseUrl
+                            ?.let { currentUrl -> services.indexOfFirst { it.baseUrl == currentUrl } }
+                            ?.takeIf { it >= 0 }
+                        state.copy(
                             discoveredServices = services,
-                            selectedService = null
+                            selectedService = nextSelectedService
                         )
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
-                        isDiscovering = false,
                         discoveryError = "服务发现失败: ${e.message}"
                     )
+                }
+            } finally {
+                _uiState.update { state ->
+                    if (state.isDiscovering) {
+                        state.copy(isDiscovering = false)
+                    } else {
+                        state
+                    }
                 }
             }
         }
@@ -222,7 +235,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         if (state.manualAddress.isNotBlank()) {
-            return "http://${state.manualAddress}:${state.manualPort}"
+            return DiscoveredService.buildBaseUrl(state.manualAddress, state.manualPort)
         }
 
         return null

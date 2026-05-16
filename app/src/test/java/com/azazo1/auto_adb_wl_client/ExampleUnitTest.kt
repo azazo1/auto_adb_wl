@@ -1,17 +1,45 @@
 package com.azazo1.auto_adb_wl_client
 
+import com.azazo1.auto_adb_wl_client.data.DiscoveredService
+import com.azazo1.auto_adb_wl_client.data.DiscoverySource
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
-import org.junit.Assert.*
-
-/**
- * Example local unit test, which will execute on the development machine (host).
- *
- * See [testing documentation](http://d.android.com/tools/testing).
- */
 class ExampleUnitTest {
     @Test
-    fun addition_isCorrect() {
-        assertEquals(4, 2 + 2)
+    fun buildBaseUrl_wrapsIpv6Host() {
+        assertEquals(
+            "http://[fd00::1]:21300/",
+            DiscoveredService.buildBaseUrl("fd00::1", 21300)
+        )
+    }
+
+    @Test
+    fun merge_combinesSourcesForSameEndpoint() {
+        val services = DiscoveredService.merge(
+            listOf(
+                DiscoveredService(
+                    name = "Desktop",
+                    host = "192.168.1.10",
+                    port = 21300,
+                    addresses = listOf("192.168.1.10"),
+                    sources = setOf(DiscoverySource.MDNS)
+                ),
+                DiscoveredService(
+                    name = "Auto ADB",
+                    host = "192.168.1.10",
+                    port = 21300,
+                    addresses = listOf("192.168.1.10"),
+                    sources = setOf(DiscoverySource.LND),
+                    networkId = "lan-demo"
+                )
+            )
+        )
+
+        assertEquals(1, services.size)
+        assertEquals("Desktop", services.single().name)
+        assertEquals("mDNS + lnd | lan-demo", services.single().discoveryLabel)
+        assertTrue(services.single().sources.containsAll(setOf(DiscoverySource.MDNS, DiscoverySource.LND)))
     }
 }

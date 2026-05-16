@@ -4,6 +4,16 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+fun stringBuildConfigField(name: String): String {
+    val value = providers.gradleProperty(name).orNull
+        ?: providers.environmentVariable(name).orNull
+        ?: ""
+    val escaped = value.trim()
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+    return "\"$escaped\""
+}
+
 android {
     namespace = "com.azazo1.auto_adb_wl_client"
     compileSdk {
@@ -20,6 +30,16 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField(
+            "String",
+            "AUTO_ADB_WL_LND_BASE_URL",
+            stringBuildConfigField("AUTO_ADB_WL_LND_BASE_URL")
+        )
+        buildConfigField(
+            "String",
+            "AUTO_ADB_WL_LND_BEARER_TOKEN",
+            stringBuildConfigField("AUTO_ADB_WL_LND_BEARER_TOKEN")
+        )
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -40,6 +60,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -69,4 +90,5 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.retrofit2.kotlinx.serialization.converter)
     implementation(libs.androidx.datastore.preferences)
+    implementation(project(":lnd-java"))
 }

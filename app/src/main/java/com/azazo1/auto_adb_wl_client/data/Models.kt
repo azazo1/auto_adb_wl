@@ -2,34 +2,27 @@ package com.azazo1.auto_adb_wl_client.data
 
 import kotlinx.serialization.Serializable
 
-/**
- * ADB 连接请求参数
- */
+enum class DiscoverySource(val label: String, val sortOrder: Int) {
+    MDNS("mDNS", 0),
+    LND("lnd", 1)
+}
+
 @Serializable
 data class AdbConnectRequest(
     val address: String
 )
 
-/**
- * ADB 断连请求
- */
 @Serializable
 data class AdbDisconnectRequest(
     val target: String
 )
 
-/**
- * ADB 配对请求参数
- */
 @Serializable
 data class AdbPairRequest(
     val address: String,
     val pair_code: String
 )
 
-/**
- * Scrcpy 启动模式
- */
 @Serializable
 data class ScrcpyLaunchRequest(
     val mode: ScrcpyLaunchMode
@@ -48,33 +41,134 @@ data class ScrcpyLaunchMode(
     }
 }
 
-/**
- * 服务端响应
- */
 @Serializable
 data class ServerResponse(
     val ok: Boolean,
     val message: String
 )
 
-/**
- * 发现的服务
- */
 data class DiscoveredService(
     val name: String,
     val host: String,
     val port: Int,
-    val addresses: List<String> = emptyList()
+    val addresses: List<String> = emptyList(),
+    val sources: Set<DiscoverySource> = setOf(DiscoverySource.MDNS),
+    val networkId: String? = null
 ) {
+    val normalizedAddresses: List<String>
+        get() = buildList {
+            addAll(addresses.map(::normalizeHost))
+            add(normalizeHost(host))
+        }.filter { it.isNotEmpty() }.distinct()
+
+    val preferredHost: String
+        get() = normalizedAddresses.firstOrNull().orEmpty()
+
     val displayAddress: String
-        get() = if (addresses.isNotEmpty()) {
-            "${addresses.first()}:$port"
-        } else {
-            "$host:$port"
-        }
+        get() = formatHostPort(preferredHost.ifBlank { normalizeHost(host) }, port)
 
     val baseUrl: String
-        get() = "http://${addresses.firstOrNull() ?: host}:$port"
+        get() = buildBaseUrl(preferredHost.ifBlank { normalizeHost(host) }, port)
+
+    val sourceLabel: String
+        get() = sources.sortedBy(DiscoverySource::sortOrder).joinToString(" + ") { it.label }
+
+    val discoveryLabel: String
+        get() = networkId?.let { "$sourceLabel | $it" } ?: sourceLabel
+
+    fun mergeWith(other: DiscoveredService): DiscoveredService {
+        val mergedSources = linkedSetOf<DiscoverySource>().apply {
+            addAll(sources)
+            addAll(other.sources)
+        }
+        val mergedAddresses = (normalizedAddresses + other.normalizedAddresses).distinct()
+        val mergedName = when {
+            name.isBlank() -> other.name
+            other.name.isBlank() -> name
+            sources.contains(DiscoverySource.MDNS) -> name
+            other.sources.contains(DiscoverySource.MDNS) -> other.name
+            else -> name
+        }
+        return copy(
+            name = mergedName,
+            host = preferredHost.ifBlank { other.preferredHost.ifBlank { normalizeHost(host) } },
+            addresses = mergedAddresses,
+            sources = mergedSources,
+            networkId = networkId ?: other.networkId
+        )
+    }
+
+    companion object {
+        fun merge(services: Collection<DiscoveredService>): List<DiscoveredService> {
+            val merged = LinkedHashMap<String, DiscoveredService>()
+            for (service in services) {
+                val normalized = service.copy(
+                    host = normalizeHost(service.host),
+                    addresses = service.normalizedAddresses
+                )
+                if (normalized.preferredHost.isBlank() || normalized.port <= 0) {
+                    continue
+                }
+                val key = normalized.baseUrl.lowercase()
+                val current = merged[key]
+                merged[key] = current?.mergeWith(normalized) ?: normalized
+            }
+            return merged.values.sortedWith(
+                compareBy<DiscoveredService>({ it.name.lowercase() }, { it.displayAddress.lowercase() })
+            )
+        }
+
+        fun buildBaseUrl(host: String, port: Int): String = buildBaseUrl(host, port.toString())
+
+        fun buildBaseUrl(host: String, port: String): String {
+            val normalizedHost = normalizeHost(host)
+            val normalizedPort = port.trim()
+            return "http://${formatHostForUrl(normalizedHost)}:$normalizedPort/"
+        }
+
+        fun extractHost(rawAddress: String): String? {
+            val trimmed = rawAddress.trim()
+            if (trimmed.isEmpty()) {
+                return null
+            }
+            if (trimmed.startsWith("[")) {
+                val closing = trimmed.indexOf(']')
+                if (closing <= 1) {
+                    return null
+                }
+                return trimmed.substring(1, closing)
+            }
+            if (trimmed.count { it == ':' } == 1) {
+                return trimmed.substringBeforeLast(':').trim().ifEmpty { null }
+            }
+            return trimmed
+        }
+
+        fun normalizeHost(rawHost: String): String {
+            return extractHost(rawHost)
+                ?.substringBefore('%')
+                ?.trim()
+                .orEmpty()
+        }
+
+        private fun formatHostPort(host: String, port: Int): String {
+            val normalizedHost = normalizeHost(host)
+            return if (normalizedHost.contains(':')) {
+                "[$normalizedHost]:$port"
+            } else {
+                "$normalizedHost:$port"
+            }
+        }
+
+        private fun formatHostForUrl(host: String): String {
+            val normalizedHost = normalizeHost(host)
+            return if (normalizedHost.contains(':')) {
+                "[$normalizedHost]"
+            } else {
+                normalizedHost
+            }
+        }
+    }
 }
 
 @Serializable
