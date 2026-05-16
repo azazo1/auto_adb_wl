@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.net.Inet4Address
+import java.net.InetAddress
 
 object NetworkUtils {
     fun isWifiConnected(context: Context): Boolean {
@@ -63,6 +64,25 @@ object NetworkUtils {
         }
     }.distinctUntilChanged()
 
+    fun currentActiveIpv4ReachabilityScope(context: Context): String? {
+        val appContext = context.applicationContext
+        val connectivityManager =
+            appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return null
+        val activeNetwork = connectivityManager.activeNetwork ?: return null
+        val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return null
+        if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+            return null
+        }
+
+        val linkAddress = connectivityManager.getLinkProperties(activeNetwork)
+            ?.linkAddresses
+            ?.firstOrNull { it.isIpv4() }
+            ?: return null
+        val hostAddress = linkAddress.address.hostAddress ?: return null
+        return toCidr(hostAddress, linkAddress.prefixLength)
+    }
+
     private fun getCurrentWifiIdentity(
         context: Context,
         connectivityManager: ConnectivityManager
@@ -104,5 +124,25 @@ object NetworkUtils {
 
     private fun LinkAddress.isIpv4(): Boolean {
         return address is Inet4Address
+    }
+
+    private fun toCidr(host: String, prefixLength: Int): String? {
+        val addressBytes = runCatching { InetAddress.getByName(host).address }.getOrNull() ?: return null
+        if (addressBytes.size != 4 || prefixLength !in 0..32) {
+            return null
+        }
+        val fullAddress = (
+            (addressBytes[0].toInt() and 0xff shl 24) or
+                (addressBytes[1].toInt() and 0xff shl 16) or
+                (addressBytes[2].toInt() and 0xff shl 8) or
+                (addressBytes[3].toInt() and 0xff)
+            )
+        val mask = if (prefixLength == 0) 0 else (-1 shl (32 - prefixLength))
+        val network = fullAddress and mask
+        val b1 = network ushr 24 and 0xff
+        val b2 = network ushr 16 and 0xff
+        val b3 = network ushr 8 and 0xff
+        val b4 = network and 0xff
+        return "$b1.$b2.$b3.$b4/$prefixLength"
     }
 }

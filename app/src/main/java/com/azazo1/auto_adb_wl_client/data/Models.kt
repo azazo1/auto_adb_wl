@@ -1,10 +1,18 @@
 package com.azazo1.auto_adb_wl_client.data
 
 import kotlinx.serialization.Serializable
+import java.math.BigInteger
+import java.net.InetAddress
 
 enum class DiscoverySource(val label: String, val sortOrder: Int) {
     MDNS("mDNS", 0),
     LND("lnd", 1)
+}
+
+enum class NetworkRelation {
+    LOCAL,
+    UNKNOWN,
+    CROSS_SUBNET
 }
 
 @Serializable
@@ -53,12 +61,13 @@ data class DiscoveredService(
     val port: Int,
     val addresses: List<String> = emptyList(),
     val sources: Set<DiscoverySource> = setOf(DiscoverySource.MDNS),
-    val discoveryDomain: String? = null
+    val discoveryDomain: String? = null,
+    val networkRelation: NetworkRelation = NetworkRelation.LOCAL
 ) {
     val normalizedAddresses: List<String>
         get() = buildList {
-            addAll(addresses.map(::normalizeHost))
             add(normalizeHost(host))
+            addAll(addresses.map(::normalizeHost))
         }.filter { it.isNotEmpty() }.distinct()
 
     val preferredHost: String
@@ -74,7 +83,11 @@ data class DiscoveredService(
         get() = sources.sortedBy(DiscoverySource::sortOrder).joinToString(" + ") { it.label }
 
     val discoveryLabel: String
-        get() = discoveryDomain?.let { "$sourceLabel | $it" } ?: sourceLabel
+        get() = listOfNotNull(
+            sourceLabel,
+            discoveryDomain,
+            networkRelationLabel()
+        ).joinToString(" | ")
 
     fun mergeWith(other: DiscoveredService): DiscoveredService {
         val mergedSources = linkedSetOf<DiscoverySource>().apply {
@@ -94,8 +107,25 @@ data class DiscoveredService(
             host = preferredHost.ifBlank { other.preferredHost.ifBlank { normalizeHost(host) } },
             addresses = mergedAddresses,
             sources = mergedSources,
-            discoveryDomain = discoveryDomain ?: other.discoveryDomain
+            discoveryDomain = discoveryDomain ?: other.discoveryDomain,
+            networkRelation = mergeNetworkRelation(other)
         )
+    }
+
+    private fun networkRelationLabel(): String? {
+        return when (networkRelation) {
+            NetworkRelation.LOCAL -> null
+            NetworkRelation.UNKNOWN -> "subnet-unknown"
+            NetworkRelation.CROSS_SUBNET -> "cross-subnet"
+        }
+    }
+
+    private fun mergeNetworkRelation(other: DiscoveredService): NetworkRelation {
+        return when {
+            networkRelation == NetworkRelation.LOCAL || other.networkRelation == NetworkRelation.LOCAL -> NetworkRelation.LOCAL
+            networkRelation == NetworkRelation.UNKNOWN || other.networkRelation == NetworkRelation.UNKNOWN -> NetworkRelation.UNKNOWN
+            else -> NetworkRelation.CROSS_SUBNET
+        }
     }
 
     companion object {
@@ -114,7 +144,11 @@ data class DiscoveredService(
                 merged[key] = current?.mergeWith(normalized) ?: normalized
             }
             return merged.values.sortedWith(
-                compareBy<DiscoveredService>({ it.name.lowercase() }, { it.displayAddress.lowercase() })
+                compareBy<DiscoveredService>(
+                    { networkRelationOrder(it.networkRelation) },
+                    { it.name.lowercase() },
+                    { it.displayAddress.lowercase() }
+                )
             )
         }
 
@@ -151,6 +185,77 @@ data class DiscoveredService(
                 .orEmpty()
         }
 
+        fun bestHostByReachability(
+            hosts: List<String>,
+            reachabilityScopes: List<String>,
+            localReachabilityScopes: List<String>
+        ): String? {
+            if (hosts.isEmpty()) {
+                return null
+            }
+            return hosts.sortedWith(
+                compareBy<String>(
+                    { hostReachabilityOrder(it, reachabilityScopes, localReachabilityScopes) },
+                    { it }
+                )
+            ).firstOrNull()
+        }
+
+        fun prioritizeHostsByReachability(
+            hosts: List<String>,
+            reachabilityScopes: List<String>,
+            localReachabilityScopes: List<String>
+        ): List<String> {
+            return hosts.sortedWith(
+                compareBy<String>(
+                    { hostReachabilityOrder(it, reachabilityScopes, localReachabilityScopes) },
+                    { it }
+                )
+            ).distinct()
+        }
+
+        fun overlappingHostsByReachability(
+            hosts: List<String>,
+            reachabilityScopes: List<String>,
+            localReachabilityScopes: List<String>
+        ): List<String> {
+            val prioritizedHosts = prioritizeHostsByReachability(
+                hosts = hosts,
+                reachabilityScopes = reachabilityScopes,
+                localReachabilityScopes = localReachabilityScopes
+            )
+            if (prioritizedHosts.isEmpty()) {
+                return emptyList()
+            }
+            val firstOrder = hostReachabilityOrder(
+                host = prioritizedHosts.first(),
+                reachabilityScopes = reachabilityScopes,
+                localReachabilityScopes = localReachabilityScopes
+            )
+            return prioritizedHosts.filter { host ->
+                hostReachabilityOrder(
+                    host = host,
+                    reachabilityScopes = reachabilityScopes,
+                    localReachabilityScopes = localReachabilityScopes
+                ) == firstOrder
+            }
+        }
+
+        fun resolveNetworkRelation(
+            reachabilityScopes: List<String>,
+            localReachabilityScopes: List<String>
+        ): NetworkRelation {
+            if (reachabilityScopes.isEmpty() || localReachabilityScopes.isEmpty()) {
+                return NetworkRelation.UNKNOWN
+            }
+            if (reachabilityScopes.any { nodeScope ->
+                localReachabilityScopes.any { localScope -> scopesOverlap(nodeScope, localScope) }
+            }) {
+                return NetworkRelation.LOCAL
+            }
+            return NetworkRelation.CROSS_SUBNET
+        }
+
         private fun formatHostPort(host: String, port: Int): String {
             val normalizedHost = normalizeHost(host)
             return if (normalizedHost.contains(':')) {
@@ -168,7 +273,88 @@ data class DiscoveredService(
                 normalizedHost
             }
         }
+
+        private fun networkRelationOrder(networkRelation: NetworkRelation): Int {
+            return when (networkRelation) {
+                NetworkRelation.LOCAL -> 0
+                NetworkRelation.UNKNOWN -> 1
+                NetworkRelation.CROSS_SUBNET -> 2
+            }
+        }
+
+        private fun hostReachabilityOrder(
+            host: String,
+            reachabilityScopes: List<String>,
+            localReachabilityScopes: List<String>
+        ): Int {
+            val matchingNodeScopes = reachabilityScopes.filter { cidr -> hostInCidr(host, cidr) }
+            if (matchingNodeScopes.isNotEmpty()) {
+                val bestLocalScopeIndex = localReachabilityScopes.indexOfFirst { localScope ->
+                    matchingNodeScopes.any { nodeScope -> scopesOverlap(nodeScope, localScope) }
+                }
+                if (bestLocalScopeIndex >= 0) {
+                    return bestLocalScopeIndex
+                }
+                return localReachabilityScopes.size
+            }
+            val fallbackLocalScopeIndex = localReachabilityScopes.indexOfFirst { cidr ->
+                hostInCidr(host, cidr)
+            }
+            if (fallbackLocalScopeIndex >= 0) {
+                return localReachabilityScopes.size + fallbackLocalScopeIndex + 1
+            }
+            return localReachabilityScopes.size * 2 + 1
+        }
+
+        private fun scopesOverlap(first: String, second: String): Boolean {
+            val firstScope = parseCidr(first) ?: return false
+            val secondScope = parseCidr(second) ?: return false
+            if (firstScope.addressBytes.size != secondScope.addressBytes.size) {
+                return false
+            }
+            val prefixLength = minOf(firstScope.prefixLength, secondScope.prefixLength)
+            return maskedAddress(firstScope.addressBytes, prefixLength) == maskedAddress(secondScope.addressBytes, prefixLength)
+        }
+
+        private fun hostInCidr(host: String, cidr: String): Boolean {
+            val scope = parseCidr(cidr) ?: return false
+            val addressBytes = runCatching { InetAddress.getByName(host).address }.getOrNull() ?: return false
+            if (addressBytes.size != scope.addressBytes.size) {
+                return false
+            }
+            return maskedAddress(addressBytes, scope.prefixLength) == maskedAddress(scope.addressBytes, scope.prefixLength)
+        }
+
+        private fun maskedAddress(addressBytes: ByteArray, prefixLength: Int): BigInteger {
+            if (prefixLength <= 0) {
+                return BigInteger.ZERO
+            }
+            val fullBits = addressBytes.size * 8
+            val normalizedPrefixLength = prefixLength.coerceIn(0, fullBits)
+            val address = BigInteger(1, addressBytes)
+            val shift = fullBits - normalizedPrefixLength
+            return address.shiftRight(shift).shiftLeft(shift)
+        }
+
+        private fun parseCidr(cidr: String): ParsedCidr? {
+            val parts = cidr.trim().split("/", limit = 2)
+            if (parts.size != 2) {
+                return null
+            }
+            val addressBytes = runCatching { InetAddress.getByName(parts[0].trim()).address }.getOrNull() ?: return null
+            val prefixLength = parts[1].trim().toIntOrNull() ?: return null
+            val maxPrefixLength = addressBytes.size * 8
+            if (prefixLength !in 0..maxPrefixLength) {
+                return null
+            }
+            return ParsedCidr(addressBytes, prefixLength)
+        }
     }
+
+    private data class ParsedCidr(
+        val addressBytes: ByteArray,
+        val prefixLength: Int
+    )
 }
 
 @Serializable

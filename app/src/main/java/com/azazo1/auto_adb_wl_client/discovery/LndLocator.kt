@@ -1,9 +1,12 @@
 package com.azazo1.auto_adb_wl_client.discovery
 
+import android.content.Context
 import android.util.Log
 import com.azazo1.auto_adb_wl_client.BuildConfig
 import com.azazo1.auto_adb_wl_client.data.DiscoveredService
 import com.azazo1.auto_adb_wl_client.data.DiscoverySource
+import com.azazo1.auto_adb_wl_client.data.NetworkRelation
+import com.azazo1.auto_adb_wl_client.util.NetworkUtils
 import io.github.azazo1.lnd.Client
 import io.github.azazo1.lnd.DiscoveredNode
 import io.github.azazo1.lnd.DiscoveryEvent
@@ -21,7 +24,7 @@ import kotlinx.coroutines.flow.flowOn
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 
-class LndLocator {
+class LndLocator(private val context: Context) {
     fun discoverServices(): Flow<List<DiscoveredService>> {
         val configuredBaseUrl = compiledBaseUrl()
         if (configuredBaseUrl == null) {
@@ -34,14 +37,19 @@ class LndLocator {
             val client = Client(configuredBaseUrl, compiledBearerToken()).setTimeoutMillis(10_000)
             val filter = buildFilter(client)
             val currentWatchHandle = AtomicReference<WatchHandle?>(null)
-            val localReachabilityScopes = runCatching { client.listReachabilityScopes() }
+            val clientReachabilityScopes = runCatching { client.listReachabilityScopes() }
                 .onFailure {
                     Log.w(TAG, "failed to list local reachability scopes: ${it.message}", it)
                 }
                 .getOrDefault(emptyList())
+            val activeIpv4Scope = NetworkUtils.currentActiveIpv4ReachabilityScope(context)
+            val localReachabilityScopes = buildList {
+                activeIpv4Scope?.let(::add)
+                addAll(clientReachabilityScopes.filterNot { it == activeIpv4Scope })
+            }
             Log.i(
                 TAG,
-                "lnd discovery flow opened: baseUrl=$configuredBaseUrl, service=${compiledServiceName()}, discoveryDomain=${compiledDiscoveryDomain() ?: "<none>"}, localScopes=${localReachabilityScopes.joinToString(",").ifEmpty { "<none>" }}"
+                "lnd discovery flow opened: baseUrl=$configuredBaseUrl, service=${compiledServiceName()}, discoveryDomain=${compiledDiscoveryDomain() ?: "<none>"}, activeIpv4Scope=${activeIpv4Scope ?: "<none>"}, localScopes=${localReachabilityScopes.joinToString(",").ifEmpty { "<none>" }}"
             )
 
             fun emitSnapshot() {
@@ -54,7 +62,7 @@ class LndLocator {
                 services.clear()
                 var accepted = 0
                 nodes.forEach { node ->
-                    node.toService()?.let {
+                    node.toService(localReachabilityScopes)?.let {
                         services[node.nodeId] = it
                         accepted++
                     }
@@ -64,7 +72,7 @@ class LndLocator {
             }
 
             fun upsertNode(node: DiscoveredNode) {
-                node.toService()?.let {
+                node.toService(localReachabilityScopes)?.let {
                     services[node.nodeId] = it
                     Log.i(TAG, "lnd upsert: ${nodeSummary(node)}")
                     emitSnapshot()
@@ -221,20 +229,42 @@ class LndLocator {
         return plainWatchResult
     }
 
-    private fun DiscoveredNode.toService(): DiscoveredService? {
+    private fun DiscoveredNode.toService(localReachabilityScopes: List<String>): DiscoveredService? {
         val hosts = lanAddrs.mapNotNull(DiscoveredService::extractHost).distinct()
-        val preferredHost = hosts.firstOrNull()
+        val prioritizedHosts = DiscoveredService.prioritizeHostsByReachability(
+            hosts = hosts,
+            reachabilityScopes = reachabilityScopes,
+            localReachabilityScopes = localReachabilityScopes
+        )
+        val overlappingHosts = DiscoveredService.overlappingHostsByReachability(
+            hosts = prioritizedHosts,
+            reachabilityScopes = reachabilityScopes,
+            localReachabilityScopes = localReachabilityScopes
+        )
+        val preferredHosts = overlappingHosts.ifEmpty { prioritizedHosts }
+        val preferredHost = preferredHosts.firstOrNull()
         if (preferredHost == null) {
             Log.w(TAG, "skip lnd node without usable host: ${nodeSummary(this)}")
             return null
+        }
+        val networkRelation = DiscoveredService.resolveNetworkRelation(
+            reachabilityScopes = reachabilityScopes,
+            localReachabilityScopes = localReachabilityScopes
+        )
+        if (networkRelation != NetworkRelation.LOCAL) {
+            Log.i(
+                TAG,
+                "lnd node is not in local subnet scope: relation=$networkRelation, preferredHost=$preferredHost, selectedAddrs=${preferredHosts.joinToString(",")}, ${nodeSummary(this)}"
+            )
         }
         return DiscoveredService(
             name = displayName,
             host = preferredHost,
             port = port,
-            addresses = hosts,
+            addresses = preferredHosts,
             sources = setOf(DiscoverySource.LND),
-            discoveryDomain = discoveryDomain
+            discoveryDomain = discoveryDomain,
+            networkRelation = networkRelation
         )
     }
 

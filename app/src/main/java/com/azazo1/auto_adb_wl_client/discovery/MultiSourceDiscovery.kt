@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.onStart
 
 class MultiSourceDiscovery(context: Context) {
     private val mdnsDiscovery = MdnsDiscovery(context)
-    private val lndLocator = LndLocator()
+    private val lndLocator = LndLocator(context)
 
     fun discoverServices(): Flow<List<DiscoveredService>> {
         return combine(
