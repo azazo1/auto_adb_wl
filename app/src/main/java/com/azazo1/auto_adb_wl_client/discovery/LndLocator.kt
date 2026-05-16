@@ -259,7 +259,7 @@ class LndLocator {
 
     companion object {
         private const val TAG = "LndLocator"
-        private const val DEFAULT_LND_SERVICE_NAME = "AutoADB._http._tcp"
+        private const val DEFAULT_LND_SERVICE_NAME = "_http._tcp"
         private const val MIN_RETRY_DELAY_MILLIS = 1_000L
         private const val MAX_RETRY_DELAY_MILLIS = 15_000L
 
