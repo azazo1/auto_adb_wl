@@ -107,6 +107,7 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
             // 服务发现状态卡片
             ServiceDiscoveryCard(
                 isDiscovering = uiState.isDiscovering,
+                isStoppingDiscovery = uiState.isStoppingDiscovery,
                 discoveredServices = uiState.discoveredServices,
                 selectedService = uiState.selectedService,
                 discoveryError = uiState.discoveryError,
@@ -178,6 +179,7 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
 @Composable
 fun ServiceDiscoveryCard(
     isDiscovering: Boolean,
+    isStoppingDiscovery: Boolean,
     discoveredServices: List<DiscoveredService>,
     selectedService: Int?,
     discoveryError: String?,
@@ -204,7 +206,11 @@ fun ServiceDiscoveryCard(
                             .size(12.dp)
                             .clip(CircleShape)
                             .background(
-                                if (isDiscovering) Color.Green else Color.Gray
+                                when {
+                                    isStoppingDiscovery -> MaterialTheme.colorScheme.tertiary
+                                    isDiscovering -> Color.Green
+                                    else -> Color.Gray
+                                }
                             )
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -218,20 +224,36 @@ fun ServiceDiscoveryCard(
                 // 发现按钮
                 Button(
                     onClick = { if (isDiscovering) onStopDiscovery() else onStartDiscovery() },
+                    enabled = !isStoppingDiscovery,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isDiscovering)
-                            MaterialTheme.colorScheme.error
-                        else
-                            MaterialTheme.colorScheme.primary
+                        containerColor = when {
+                            isStoppingDiscovery -> MaterialTheme.colorScheme.tertiary
+                            isDiscovering -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.primary
+                        }
                     )
                 ) {
-                    Icon(
-                        imageVector = if (isDiscovering) Icons.Default.Stop else Icons.Default.Search,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    if (isStoppingDiscovery) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = MaterialTheme.colorScheme.onTertiary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (isDiscovering) Icons.Default.Stop else Icons.Default.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(if (isDiscovering) "停止" else "发现")
+                    Text(
+                        when {
+                            isStoppingDiscovery -> "停止中"
+                            isDiscovering -> "停止"
+                            else -> "发现"
+                        }
+                    )
                 }
             }
 
@@ -262,7 +284,7 @@ fun ServiceDiscoveryCard(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "正在搜索服务...",
+                                text = if (isStoppingDiscovery) "正在停止搜索..." else "正在搜索服务...",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

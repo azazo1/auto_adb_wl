@@ -1,6 +1,7 @@
 package com.azazo1.auto_adb_wl_client.ui
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.azazo1.auto_adb_wl_client.accessibility.MyAccessibilityService
@@ -42,6 +43,7 @@ enum class OperationType {
 data class UiState(
     // 服务发现状态
     val isDiscovering: Boolean = false,
+    val isStoppingDiscovery: Boolean = false,
     val discoveredServices: List<DiscoveredService> = emptyList(),
     val discoveryError: String? = null,
 
@@ -123,9 +125,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * 开始发现服务
      */
     fun startDiscovery() {
-        if (_uiState.value.isDiscovering) return
+        val currentJob = discoveryJob
+        if (currentJob != null && !currentJob.isCompleted) {
+            Log.d(TAG, "ignore startDiscovery because a discovery job is still running")
+            return
+        }
 
-        _uiState.update { it.copy(isDiscovering = true, discoveryError = null) }
+        _uiState.update { it.copy(isDiscovering = true, isStoppingDiscovery = false, discoveryError = null) }
+        Log.i(TAG, "service discovery starting")
 
         discoveryJob = viewModelScope.launch {
             try {
@@ -143,20 +150,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
                 }
+                Log.w(TAG, "service discovery flow completed")
             } catch (e: CancellationException) {
+                Log.i(TAG, "service discovery cancelled")
                 throw e
             } catch (e: Exception) {
+                Log.e(TAG, "service discovery failed: ${e.message}", e)
                 _uiState.update {
                     it.copy(
                         discoveryError = "服务发现失败: ${e.message}"
                     )
                 }
             } finally {
+                Log.i(TAG, "service discovery stopping")
+                discoveryJob = null
                 _uiState.update { state ->
                     if (state.isDiscovering) {
-                        state.copy(isDiscovering = false)
+                        state.copy(isDiscovering = false, isStoppingDiscovery = false)
                     } else {
-                        state
+                        state.copy(isStoppingDiscovery = false)
                     }
                 }
             }
@@ -167,9 +179,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * 停止发现服务
      */
     fun stopDiscovery() {
-        discoveryJob?.cancel()
-        discoveryJob = null
-        _uiState.update { it.copy(isDiscovering = false) }
+        val currentJob = discoveryJob
+        if (currentJob == null || currentJob.isCompleted) {
+            return
+        }
+        if (_uiState.value.isStoppingDiscovery) {
+            return
+        }
+        Log.i(TAG, "service discovery stop requested")
+        _uiState.update { it.copy(isStoppingDiscovery = true) }
+        currentJob.cancel()
     }
 
     /**
@@ -498,5 +517,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 port = state.manualPort
             )
         )
+    }
+
+    companion object {
+        private const val TAG = "MainViewModel"
     }
 }

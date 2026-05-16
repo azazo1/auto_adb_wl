@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import java.util.ArrayDeque
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MdnsDiscovery(context: Context) {
     private val nsdManager = context.getSystemService(Context.NSD_SERVICE) as NsdManager
@@ -23,6 +24,7 @@ class MdnsDiscovery(context: Context) {
             services.clear()
             val resolveQueue = ArrayDeque<NsdServiceInfo>()
             var isResolving = false
+            val discoveryStarted = AtomicBoolean(false)
             Log.i(TAG, "mDNS discovery flow opened: serviceType=$SERVICE_TYPE")
 
             fun handleResolvedService(serviceInfo: NsdServiceInfo) {
@@ -77,6 +79,7 @@ class MdnsDiscovery(context: Context) {
 
             val discoveryListener = object : NsdManager.DiscoveryListener {
                 override fun onDiscoveryStarted(regType: String) {
+                    discoveryStarted.set(true)
                     Log.i(TAG, "mDNS discovery started: regType=$regType")
                 }
 
@@ -126,17 +129,18 @@ class MdnsDiscovery(context: Context) {
                 }
 
                 override fun onDiscoveryStopped(serviceType: String) {
+                    discoveryStarted.set(false)
                     Log.i(TAG, "mDNS discovery stopped: serviceType=$serviceType")
                 }
 
                 override fun onStartDiscoveryFailed(st: String, err: Int) {
                     Log.e(TAG, "mDNS discovery start failed: serviceType=$st, errorCode=$err")
-                    close()
+                    close(IllegalStateException("mDNS discovery start failed: errorCode=$err"))
                 }
 
                 override fun onStopDiscoveryFailed(st: String, err: Int) {
                     Log.e(TAG, "mDNS discovery stop failed: serviceType=$st, errorCode=$err")
-                    close()
+                    discoveryStarted.set(false)
                 }
             }
 
@@ -153,9 +157,12 @@ class MdnsDiscovery(context: Context) {
 
             awaitClose {
                 Log.i(TAG, "mDNS discovery flow closing")
-                try {
-                    nsdManager.stopServiceDiscovery(discoveryListener)
-                } catch (_: Exception) {
+                if (discoveryStarted.get()) {
+                    try {
+                        nsdManager.stopServiceDiscovery(discoveryListener)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "mDNS stopServiceDiscovery threw an exception", e)
+                    }
                 }
             }
         }
