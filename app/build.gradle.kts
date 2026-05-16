@@ -4,9 +4,38 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+fun parseDotEnvLine(line: String): Pair<String, String>? {
+    val trimmed = line.trim()
+    if (trimmed.isEmpty() || trimmed.startsWith("#")) {
+        return null
+    }
+    val normalized = trimmed.removePrefix("export ").trim()
+    val separatorIndex = normalized.indexOf('=')
+    if (separatorIndex <= 0) {
+        return null
+    }
+    val key = normalized.substring(0, separatorIndex).trim()
+    if (key.isEmpty()) {
+        return null
+    }
+    val value = normalized.substring(separatorIndex + 1)
+        .trim()
+        .removeSurrounding("\"")
+        .removeSurrounding("'")
+    return key to value
+}
+
+val dotEnvValues: Map<String, String> = rootProject.layout.projectDirectory.file(".env").asFile
+    .takeIf { it.isFile }
+    ?.readLines()
+    ?.mapNotNull(::parseDotEnvLine)
+    ?.toMap()
+    ?: emptyMap()
+
 fun stringBuildConfigField(name: String): String {
     val value = providers.gradleProperty(name).orNull
         ?: providers.environmentVariable(name).orNull
+        ?: dotEnvValues[name]
         ?: ""
     val escaped = value.trim()
         .replace("\\", "\\\\")
@@ -39,6 +68,11 @@ android {
             "String",
             "AUTO_ADB_WL_LND_BEARER_TOKEN",
             stringBuildConfigField("AUTO_ADB_WL_LND_BEARER_TOKEN")
+        )
+        buildConfigField(
+            "String",
+            "AUTO_ADB_WL_LND_SERVICE_NAME",
+            stringBuildConfigField("AUTO_ADB_WL_LND_SERVICE_NAME")
         )
         vectorDrawables {
             useSupportLibrary = true

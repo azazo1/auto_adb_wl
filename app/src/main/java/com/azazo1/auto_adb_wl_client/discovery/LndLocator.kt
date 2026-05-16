@@ -110,7 +110,7 @@ class LndLocator {
     }
 
     private fun buildFilter(client: Client): DiscoveryFilter {
-        val filter = DiscoveryFilter().withService(LND_SERVICE_NAME)
+        val filter = DiscoveryFilter().withService(compiledServiceName())
         runCatching { client.resolveNetworkId() }
             .getOrNull()
             ?.let(filter::withNetworkId)
@@ -159,8 +159,14 @@ class LndLocator {
 
     private fun compiledBearerToken(): String = BuildConfig.AUTO_ADB_WL_LND_BEARER_TOKEN.trim()
 
+    private fun compiledServiceName(): String {
+        return BuildConfig.AUTO_ADB_WL_LND_SERVICE_NAME
+            .trim()
+            .ifEmpty { DEFAULT_LND_SERVICE_NAME }
+    }
+
     companion object {
-        private const val LND_SERVICE_NAME = "_auto-adb-wl._tcp"
+        private const val DEFAULT_LND_SERVICE_NAME = "AutoADB._http._tcp"
         private const val MIN_RETRY_DELAY_MILLIS = 1_000L
         private const val MAX_RETRY_DELAY_MILLIS = 15_000L
 
