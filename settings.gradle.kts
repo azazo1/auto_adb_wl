@@ -25,5 +25,6 @@ dependencyResolutionManagement {
 rootProject.name = "Auto ADB"
 include(":app")
 include(":lnd-java")
+include(":lnd-playground")
 
 project(":lnd-java").projectDir = file("third_party/lnd/impls/java")
