@@ -32,14 +32,14 @@ class ExampleUnitTest {
                     port = 21300,
                     addresses = listOf("192.168.1.10"),
                     sources = setOf(DiscoverySource.LND),
-                    networkId = "lan-demo"
+                    discoveryDomain = "office-a"
                 )
             )
         )
 
         assertEquals(1, services.size)
         assertEquals("Desktop", services.single().name)
-        assertEquals("mDNS + lnd | lan-demo", services.single().discoveryLabel)
+        assertEquals("mDNS + lnd | office-a", services.single().discoveryLabel)
         assertTrue(services.single().sources.containsAll(setOf(DiscoverySource.MDNS, DiscoverySource.LND)))
     }
 }

@@ -111,9 +111,8 @@ class LndLocator {
 
     private fun buildFilter(client: Client): DiscoveryFilter {
         val filter = DiscoveryFilter().withService(compiledServiceName())
-        runCatching { client.resolveNetworkId() }
-            .getOrNull()
-            ?.let(filter::withNetworkId)
+        compiledDiscoveryDomain()
+            ?.let(filter::withDiscoveryDomain)
         return filter
     }
 
@@ -147,7 +146,7 @@ class LndLocator {
             port = port,
             addresses = hosts,
             sources = setOf(DiscoverySource.LND),
-            networkId = networkId
+            discoveryDomain = discoveryDomain
         )
     }
 
@@ -158,6 +157,12 @@ class LndLocator {
     }
 
     private fun compiledBearerToken(): String = BuildConfig.AUTO_ADB_WL_LND_BEARER_TOKEN.trim()
+
+    private fun compiledDiscoveryDomain(): String? {
+        return BuildConfig.AUTO_ADB_WL_LND_DISCOVERY_DOMAIN
+            .trim()
+            .ifEmpty { null }
+    }
 
     private fun compiledServiceName(): String {
         return BuildConfig.AUTO_ADB_WL_LND_SERVICE_NAME

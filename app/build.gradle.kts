@@ -71,6 +71,11 @@ android {
         )
         buildConfigField(
             "String",
+            "AUTO_ADB_WL_LND_DISCOVERY_DOMAIN",
+            stringBuildConfigField("AUTO_ADB_WL_LND_DISCOVERY_DOMAIN")
+        )
+        buildConfigField(
+            "String",
             "AUTO_ADB_WL_LND_SERVICE_NAME",
             stringBuildConfigField("AUTO_ADB_WL_LND_SERVICE_NAME")
         )

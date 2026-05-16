@@ -53,7 +53,7 @@ data class DiscoveredService(
     val port: Int,
     val addresses: List<String> = emptyList(),
     val sources: Set<DiscoverySource> = setOf(DiscoverySource.MDNS),
-    val networkId: String? = null
+    val discoveryDomain: String? = null
 ) {
     val normalizedAddresses: List<String>
         get() = buildList {
@@ -74,7 +74,7 @@ data class DiscoveredService(
         get() = sources.sortedBy(DiscoverySource::sortOrder).joinToString(" + ") { it.label }
 
     val discoveryLabel: String
-        get() = networkId?.let { "$sourceLabel | $it" } ?: sourceLabel
+        get() = discoveryDomain?.let { "$sourceLabel | $it" } ?: sourceLabel
 
     fun mergeWith(other: DiscoveredService): DiscoveredService {
         val mergedSources = linkedSetOf<DiscoverySource>().apply {
@@ -94,7 +94,7 @@ data class DiscoveredService(
             host = preferredHost.ifBlank { other.preferredHost.ifBlank { normalizeHost(host) } },
             addresses = mergedAddresses,
             sources = mergedSources,
-            networkId = networkId ?: other.networkId
+            discoveryDomain = discoveryDomain ?: other.discoveryDomain
         )
     }
 
