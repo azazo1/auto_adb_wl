@@ -34,9 +34,14 @@ class LndLocator {
             val client = Client(configuredBaseUrl, compiledBearerToken()).setTimeoutMillis(10_000)
             val filter = buildFilter(client)
             val currentWatchHandle = AtomicReference<WatchHandle?>(null)
+            val localReachabilityScopes = runCatching { client.listReachabilityScopes() }
+                .onFailure {
+                    Log.w(TAG, "failed to list local reachability scopes: ${it.message}", it)
+                }
+                .getOrDefault(emptyList())
             Log.i(
                 TAG,
-                "lnd discovery flow opened: baseUrl=$configuredBaseUrl, service=${compiledServiceName()}, discoveryDomain=${compiledDiscoveryDomain() ?: "<none>"}"
+                "lnd discovery flow opened: baseUrl=$configuredBaseUrl, service=${compiledServiceName()}, discoveryDomain=${compiledDiscoveryDomain() ?: "<none>"}, localScopes=${localReachabilityScopes.joinToString(",").ifEmpty { "<none>" }}"
             )
 
             fun emitSnapshot() {
@@ -254,7 +259,7 @@ class LndLocator {
     }
 
     private fun nodeSummary(node: DiscoveredNode): String {
-        return "nodeId=${node.nodeId}, name=${node.displayName}, service=${node.service}, port=${node.port}, discoveryDomain=${node.discoveryDomain ?: "<none>"}, addrs=${node.lanAddrs.joinToString(",")}"
+        return "nodeId=${node.nodeId}, name=${node.displayName}, service=${node.service}, port=${node.port}, discoveryDomain=${node.discoveryDomain ?: "<none>"}, addrs=${node.lanAddrs.joinToString(",")}, scopes=${node.reachabilityScopes.joinToString(",").ifEmpty { "<none>" }}"
     }
 
     companion object {
