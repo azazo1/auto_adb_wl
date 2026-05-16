@@ -27,6 +27,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 public final class Main {
     private static final String ENV_LND_BASE_URL = "AUTO_ADB_WL_LND_BASE_URL";
@@ -73,7 +75,7 @@ public final class Main {
     private static void runScopes(Config config) throws Exception {
         Client client = buildClient(config);
         printConfigSummary("scopes", config, null, client);
-        List<String> scopes = client.listReachabilityScopes();
+        List<String> scopes = await(client.listReachabilityScopesAsync());
         System.out.println("local reachability scopes:");
         printList(scopes, "  ");
     }
@@ -159,8 +161,8 @@ public final class Main {
     private static List<DiscoveredNode> tryDiscover(Client client, DiscoveryFilter filter, boolean autoScopeOverlap) {
         try {
             List<DiscoveredNode> nodes = autoScopeOverlap
-                ? client.discoverWithAutoScopeOverlap(filter)
-                : client.discover(filter);
+                ? await(client.discoverWithAutoScopeOverlapAsync(filter))
+                : await(client.discoverAsync(filter));
             System.out.println((autoScopeOverlap ? "auto-scope" : "plain") + " discover succeeded: nodes=" + nodes.size());
             return nodes;
         } catch (Exception error) {
@@ -173,10 +175,10 @@ public final class Main {
     private static WatchHandle startWatch(Client client, DiscoveryFilter filter, boolean autoScopeOverlap) throws LndException {
         if (autoScopeOverlap) {
             System.out.println("starting watch with auto scope overlap");
-            return client.watchWithAutoScopeOverlap(filter, envelope -> printWatchEvent("event", envelope.getCursor(), envelope.getEvent()));
+            return await(client.watchWithAutoScopeOverlapAsync(filter, envelope -> printWatchEvent("event", envelope.getCursor(), envelope.getEvent())));
         }
         System.out.println("starting plain watch");
-        return client.watch(filter, envelope -> printWatchEvent("event", envelope.getCursor(), envelope.getEvent()));
+        return await(client.watchAsync(filter, envelope -> printWatchEvent("event", envelope.getCursor(), envelope.getEvent())));
     }
 
     private static void printWatchEvent(String label, Long cursor, DiscoveryEvent event) {
@@ -366,11 +368,32 @@ public final class Main {
 
     private static List<String> safeListReachabilityScopes(Client client) {
         try {
-            return client.listReachabilityScopes();
+            return await(client.listReachabilityScopesAsync());
         } catch (Exception error) {
             System.out.println("failed to list local reachability scopes: " + error.getMessage());
             error.printStackTrace(System.out);
             return Collections.emptyList();
+        }
+    }
+
+    private static <T> T await(CompletableFuture<T> future) throws LndException {
+        try {
+            return future.get();
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new LndException("async call interrupted", error);
+        } catch (ExecutionException error) {
+            Throwable cause = error.getCause();
+            if (cause instanceof LndException) {
+                throw (LndException) cause;
+            }
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
+            throw new LndException("async call failed", cause == null ? error : cause);
         }
     }
 

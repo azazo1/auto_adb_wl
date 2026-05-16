@@ -12,17 +12,23 @@ import io.github.azazo1.lnd.DiscoveredNode
 import io.github.azazo1.lnd.DiscoveryEvent
 import io.github.azazo1.lnd.DiscoveryFilter
 import io.github.azazo1.lnd.WatchHandle
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 class LndLocator(private val context: Context) {
     fun discoverServices(): Flow<List<DiscoveredService>> {
@@ -37,7 +43,9 @@ class LndLocator(private val context: Context) {
             val client = Client(configuredBaseUrl, compiledBearerToken()).setTimeoutMillis(10_000)
             val filter = buildFilter(client)
             val currentWatchHandle = AtomicReference<WatchHandle?>(null)
-            val clientReachabilityScopes = runCatching { client.listReachabilityScopes() }
+            val clientReachabilityScopes = captureLndResult {
+                client.listReachabilityScopesAsync().awaitLnd("listReachabilityScopesAsync")
+            }
                 .onFailure {
                     Log.w(TAG, "failed to list local reachability scopes: ${it.message}", it)
                 }
@@ -168,8 +176,14 @@ class LndLocator(private val context: Context) {
         return filter
     }
 
-    private fun discoverOnce(client: Client, filter: DiscoveryFilter): Result<List<DiscoveredNode>> {
-        val autoScopeResult = runCatching { client.discoverWithAutoScopeOverlap(filter.copy()) }
+    private suspend fun discoverOnce(
+        client: Client,
+        filter: DiscoveryFilter
+    ): Result<List<DiscoveredNode>> {
+        val autoScopeResult = captureLndResult {
+            client.discoverWithAutoScopeOverlapAsync(filter.copy())
+                .awaitLnd("discoverWithAutoScopeOverlapAsync")
+        }
         if (autoScopeResult.isSuccess) {
             Log.i(
                 TAG,
@@ -185,7 +199,9 @@ class LndLocator(private val context: Context) {
             autoScopeError
         )
 
-        val plainDiscoverResult = runCatching { client.discover(filter.copy()) }
+        val plainDiscoverResult = captureLndResult {
+            client.discoverAsync(filter.copy()).awaitLnd("discoverAsync")
+        }
         plainDiscoverResult.onSuccess {
             Log.i(TAG, "lnd discover succeeded without auto scope overlap: nodes=${it.size}")
         }.onFailure {
@@ -194,15 +210,26 @@ class LndLocator(private val context: Context) {
         return plainDiscoverResult
     }
 
-    private fun startWatch(
+    private suspend fun startWatch(
         client: Client,
         filter: DiscoveryFilter,
         onEvent: (DiscoveryEvent) -> Unit
     ): Result<WatchHandle> {
-        val autoScopeResult = runCatching {
-            client.watchWithAutoScopeOverlap(filter.copy()) { envelope ->
+        val autoScopeResult = captureLndResult {
+            client.watchWithAutoScopeOverlapAsync(
+                filter.copy()
+            ) { envelope ->
                 onEvent(envelope.event)
-            }
+            }.awaitLnd(
+                label = "watchWithAutoScopeOverlapAsync",
+                onCompletedAfterCancellation = { lateHandle ->
+                    Log.i(
+                        TAG,
+                        "lnd watch future completed after cancellation, closing late handle: call=watchWithAutoScopeOverlapAsync"
+                    )
+                    lateHandle.close()
+                }
+            )
         }
         if (autoScopeResult.isSuccess) {
             Log.i(TAG, "lnd watch started with auto scope overlap")
@@ -216,10 +243,21 @@ class LndLocator(private val context: Context) {
             autoScopeError
         )
 
-        val plainWatchResult = runCatching {
-            client.watch(filter.copy()) { envelope ->
+        val plainWatchResult = captureLndResult {
+            client.watchAsync(
+                filter.copy()
+            ) { envelope ->
                 onEvent(envelope.event)
-            }
+            }.awaitLnd(
+                label = "watchAsync",
+                onCompletedAfterCancellation = { lateHandle ->
+                    Log.i(
+                        TAG,
+                        "lnd watch future completed after cancellation, closing late handle: call=watchAsync"
+                    )
+                    lateHandle.close()
+                }
+            )
         }
         plainWatchResult.onSuccess {
             Log.i(TAG, "lnd watch started without auto scope overlap")
@@ -290,6 +328,51 @@ class LndLocator(private val context: Context) {
 
     private fun nodeSummary(node: DiscoveredNode): String {
         return "nodeId=${node.nodeId}, name=${node.displayName}, service=${node.service}, port=${node.port}, discoveryDomain=${node.discoveryDomain ?: "<none>"}, addrs=${node.lanAddrs.joinToString(",")}, scopes=${node.reachabilityScopes.joinToString(",").ifEmpty { "<none>" }}"
+    }
+
+    private suspend fun <T> CompletableFuture<T>.awaitLnd(
+        label: String,
+        onCompletedAfterCancellation: ((T) -> Unit)? = null
+    ): T = suspendCancellableCoroutine { continuation ->
+        whenComplete { value, error ->
+            val cause = unwrapCompletionError(error)
+            if (cause == null) {
+                if (continuation.isActive) {
+                    continuation.resume(value)
+                } else {
+                    onCompletedAfterCancellation?.invoke(value)
+                    Log.d(TAG, "lnd async call completed after cancellation: call=$label")
+                }
+                return@whenComplete
+            }
+            if (continuation.isActive) {
+                continuation.resumeWithException(cause)
+            } else {
+                Log.d(TAG, "lnd async call failed after cancellation: call=$label, error=${cause.message}")
+            }
+        }
+        continuation.invokeOnCancellation {
+            Log.d(TAG, "lnd async call cancellation observed: call=$label")
+        }
+    }
+
+    private fun unwrapCompletionError(error: Throwable?): Throwable? {
+        return when (error) {
+            null -> null
+            is CompletionException -> error.cause ?: error
+            else -> error
+        }
+    }
+
+    private suspend fun <T> captureLndResult(block: suspend () -> T): Result<T> {
+        return try {
+            Result.success(block())
+        } catch (error: Throwable) {
+            if (error is CancellationException) {
+                throw error
+            }
+            Result.failure(error)
+        }
     }
 
     companion object {
